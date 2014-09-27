@@ -8,4 +8,4 @@ CREATE TABLE `crest_systemindex`(
 ENGINE=InnoDB DEFAULT CHARSET=latin1;
 CREATE INDEX solarsystem ON crest_systemindex(solarsystemid);
 CREATE INDEX activity ON crest_systemindex(solarsystemid);
-CREATE INDEX entrydate ON crest_systemindex(activity_date);
+CREATE INDEX entrydate ON crest_systemindex(activity_date)
