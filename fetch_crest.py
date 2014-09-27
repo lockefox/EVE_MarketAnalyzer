@@ -155,6 +155,13 @@ def fetch_markethistory(trunc_regions=False, debug=False, testserver=False):
 		item_list.append(row[0])
 	#if debug: print item_list
 	
+	price_history_headers = []
+	data_cur.execute('''SHOW COLUMNS FROM `%s`''' % crest_pricehistory)
+	table_info = data_cur.fetchall()
+	#TODO: If len(table_info) == 0 exception
+	for column in table_info:
+		price_history_headers.append(column[0])
+	
 	todo_region_list = {}
 	if trunc_regions:	todo_region_list = trunc_region_list
 	else: 				todo_region_list = region_list
@@ -165,9 +172,58 @@ def fetch_markethistory(trunc_regions=False, debug=False, testserver=False):
 			query = 'market/%s/types/%s/history/' % (regionID,itemID)
 			if debug: print query
 			price_JSON = fetchURL_CREST(query, testserver)
-			for 
-			sys.exit(1)
+			#TODO: 0-fill missing dates
+			if len(price_JSON['items']) == 0: continue
+			
+			data_to_write = []
+			for entry in price_JSON['items']:
+				line_to_write = []
+				line_to_write.append(_date_convert(entry['date']))
+				line_to_write.append(itemID)
+				line_to_write.append(int(regionID))
+				line_to_write.append(entry['orderCount'])
+				line_to_write.append(entry['volume'])
+				line_to_write.append(entry['lowPrice'])
+				line_to_write.append(entry['highPrice'])
+				line_to_write.append(entry['avgPrice'])
+				data_to_write.append(line_to_write)
+			
+			writeSQL(data_cur,crest_pricehistory,price_history_headers,data_to_write)
+		sys.exit(1)
 
+def writeSQL(db_cur, table, headers_list, data_list, hard_overwrite=True, debug=False):
+	insert_statement = '''INSERT INTO %s (%s) VALUES''' % (table, ','.join(headers_list))
+	if debug:
+		print insert_statement
+	for entry in data_list:
+		value_string = ''
+		for value in entry:
+			if isinstance(value, (int,long,float)): #if number, add value
+				value_string = '%s,%s' % ( value_string, value)
+			else:		#if string value: add 'value'
+				if value == None:
+					value_string = '%s,NULL' % ( value_string)
+				else:
+					value = value.replace('\'', '\\\'') #sanitize apostrophies
+					value_string = '%s,\'%s\'' % ( value_string, value)
+		value_string = value_string[1:]
+		if debug:
+			print value_string
+		insert_statement = '%s (%s),' % (insert_statement, value_string)
+	
+	
+	insert_statement = insert_statement[:-1]	#pop off trailing ','
+	if hard_overwrite:
+		duplicate_str = '''ON DUPLICATE KEY UPDATE '''
+		for header in headers_list:
+			duplicate_str = "%s %s=%s," % (duplicate_str, header, header)
+		
+		insert_statement = "%s %s" % (insert_statement, duplicate_str)
+		insert_statement = insert_statement[:-1]	#pop off trailing ','
+	if debug:
+		print insert_statement
+	db_cur.execute(insert_statement)
+	db_cur.commit()
 def fetchURL_CREST(query, testserver=False, debug=False):
 	#Returns parsed JSON of CREST query
 	real_query = ''
@@ -226,6 +282,10 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 		sys.exit(-2)
 	
 	return return_result
+
+def _date_convert(date_str):
+	new_time = datetime.strptime(date_str,'%Y-%m-%dT%H:%M:%S')
+	return new_time.strftime('%Y-%m-%d')
 	
 def main():
 	_validate_connection()
