@@ -164,11 +164,11 @@ def fetch_markethistory(trunc_regions=False, debug=False, testserver=False):
 		for itemID in item_list:
 			query = 'market/%s/types/%s/history/' % (regionID,itemID)
 			if debug: print query
-			price_JSON = fetchURL_CREST(query, True, testserver)
-			print price_JSON
+			price_JSON = fetchURL_CREST(query, testserver)
+			for 
 			sys.exit(1)
 
-def fetchURL_CREST(query, debug=False, testserver=False):
+def fetchURL_CREST(query, testserver=False, debug=False):
 	#Returns parsed JSON of CREST query
 	real_query = ''
 	if testserver:	real_query = '%s%s' % (crest_test_path, query)
@@ -226,6 +226,7 @@ def fetchURL_CREST(query, debug=False, testserver=False):
 		sys.exit(-2)
 	
 	return return_result
+	
 def main():
 	_validate_connection()
 	
