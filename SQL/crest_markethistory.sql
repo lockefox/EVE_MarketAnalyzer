@@ -5,9 +5,9 @@ CREATE TABLE `crest_markethistory` (
 	`regionid`		INT(8)		NOT NULL,
 	`orders`		INT(8)		NULL,
 	`volume`		BIGINT(12)	NULL,
-	`lowPrice`		FLOAT(12,2)	NULL,
-	`highPrice`		FLOAT(12,2) NULL,
-	`avgPrice`		FLOAT(12,2) NULL,
+	`lowPrice`		FLOAT(13,2)	NULL,
+	`highPrice`		FLOAT(13,2) NULL,
+	`avgPrice`		FLOAT(13,2) NULL,
 	PRIMARY KEY (price_date, itemid, regionid))
 ENGINE=InnoDB DEFAULT CHARSET=latin1;
 CREATE INDEX price_dates ON crest_markethistory(price_date);

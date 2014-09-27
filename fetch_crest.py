@@ -179,14 +179,15 @@ def fetch_markethistory(trunc_regions=False, debug=False, testserver=False):
 			None
 		
 		for itemID in item_list:
+			query = 'market/%s/types/%s/history/' % (regionID,itemID)
 			try:
 				if str(itemID) in crash_JSON['market_history'][str(regionID)]:
 					if debug: print '%s:\tskip' % query
 					continue #already processed data
 			except KeyError as e:
-				None
-			query = 'market/%s/types/%s/history/' % (regionID,itemID)
+				None				
 			if debug: print query
+			
 			price_JSON = fetchURL_CREST(query, testserver)
 			
 			#TODO: 0-fill missing dates
