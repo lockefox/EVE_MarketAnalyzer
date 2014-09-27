@@ -9,7 +9,12 @@ from datetime import datetime
 
 conf = ConfigParser.ConfigParser()
 conf.read(['init.ini','init_local.ini'])
-
+####GLOBALS####
+crest_path = conf.get('CREST','default_path')
+crest_test_path = conf.get('CREST','test_path')
+user_agent = conf.get('GLOBALS','user_agent')
+retry_limit = int(conf.get('GLOBALS','default_retries'))
+sleep_timer = int(conf.get('GLOBALS','default_sleep'))
 ####DB STUFF####
 db_host   = conf.get('GLOBALS','db_host')
 db_user   = conf.get('GLOBALS','db_user')
@@ -99,6 +104,13 @@ region_list = {
 	'10000069':'Black Rise'
 	}
 
+trunc_region_list = {
+	'10000002':'The Forge',
+	'10000043':'Domain',
+	'10000032':'Sinq Laison',
+	'10000042':'Metropolis',
+	}
+	
 def _validate_connection():
 	global data_conn, data_cur, sde_conn, sde_cur
 	
@@ -131,11 +143,95 @@ def _initSQL(table_name, db_cur, db_conn, debug=False):
 			sys.exit(2)
 		sys.stdout.write('.%s:\tCREATED\n' % table_name)
 		return
+	
+def fetch_markethistory(trunc_regions=False, debug=False, testserver=False):
+	sde_cur.execute('''SELECT typeid
+					FROM invtypes
+					WHERE marketgroupid IS NOT NULL
+					AND published = 1''')
+	item_list_tmp = sde_cur.fetchall()
+	item_list = []
+	for row in item_list_tmp:
+		item_list.append(row[0])
+	#if debug: print item_list
+	
+	todo_region_list = {}
+	if trunc_regions:	todo_region_list = trunc_region_list
+	else: 				todo_region_list = region_list
+	
+	for regionID,regionName in todo_region_list.iteritems():
+		print regionName
+		for itemID in item_list:
+			query = 'market/%s/types/%s/history/' % (regionID,itemID)
+			if debug: print query
+			price_JSON = fetchURL_CREST(query, True, testserver)
+			print price_JSON
+			sys.exit(1)
+
+def fetchURL_CREST(query, debug=False, testserver=False):
+	#Returns parsed JSON of CREST query
+	real_query = ''
+	if testserver:	real_query = '%s%s' % (crest_test_path, query)
+	else: 			real_query = '%s%s' % (crest_path, query)
+	
+	if debug: print real_query
+	
+	request = urllib2.Request(real_query)
+	request.add_header('Accept-Encoding','gzip')
+	request.add_header('User-Agent',user_agent)
+	
+	headers = {}
+	for tries in range (0,retry_limit):
+		time.sleep(sleep_timer*tries)
+		try:
+			opener = urllib2.build_opener()
+			raw_response = opener.open(request)
+			headers = raw_response.headers
+			response = raw_response.read()
+		except urllib2.HTTPError as e:
+			print 'HTTPError:%s %s' % (e,url)
+			continue
+		except urllib2.URLError as e:
+			print 'URLError:%s %s' % (e,url)
+			continue
+		except socket.error as e:
+			print 'Socket Error:%s %s' % (e,url)
+			continue
 		
+		do_gzip = False
+		try:
+			if headers['Content-Encoding'] == 'gzip':
+				do_gzip = True
+		except KeyError as e:
+			None
+				
+		if do_gzip:
+			try:
+				buf = StringIO.StringIO(response)
+				zipper = gzip.GzipFile(fileobj=buf)
+				return_result = json.load(zipper)
+			except ValueError as e:
+				print "Empty response: retry %s" % url
+				continue
+			except IOError as e:
+				print "gzip unreadable: Retry %s" %url
+				continue
+			else:
+				break
+		else:
+			return_result = json.loads(response)
+			break
+	else:
+		print headers
+		sys.exit(-2)
+	
+	return return_result
 def main():
 	_validate_connection()
 	
 	###FETCH PRICEHISTORY###
+	print "FETCHING CREST/MARKET_HISTORY"
+	fetch_markethistory(True,True)
 	
 if __name__ == "__main__":
 	main()
