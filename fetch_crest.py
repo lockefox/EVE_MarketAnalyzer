@@ -15,6 +15,9 @@ crest_test_path = conf.get('CREST','test_path')
 user_agent = conf.get('GLOBALS','user_agent')
 retry_limit = int(conf.get('GLOBALS','default_retries'))
 sleep_timer = int(conf.get('GLOBALS','default_sleep'))
+crash_filename = conf.get('CREST','progress_file')
+crash_JSON = None
+
 ####DB STUFF####
 db_host   = conf.get('GLOBALS','db_host')
 db_user   = conf.get('GLOBALS','db_user')
@@ -107,7 +110,7 @@ region_list = {
 trunc_region_list = {
 	'10000002':'The Forge',
 	'10000043':'Domain',
-	'10000032':'Sinq Laison',
+	#'10000032':'Sinq Laison',
 	'10000042':'Metropolis',
 	}
 	
@@ -168,12 +171,28 @@ def fetch_markethistory(trunc_regions=False, debug=False, testserver=False):
 	
 	for regionID,regionName in todo_region_list.iteritems():
 		print regionName
+		
+		try:
+			if len(crash_JSON['market_history'][str(regionID)]) == len(item_list):
+				print '\tRegion Complete'
+		except KeyError as e:
+			None
+		
 		for itemID in item_list:
+			try:
+				if str(itemID) in crash_JSON['market_history'][str(regionID)]:
+					if debug: print '%s:\tskip' % query
+					continue #already processed data
+			except KeyError as e:
+				None
 			query = 'market/%s/types/%s/history/' % (regionID,itemID)
 			if debug: print query
 			price_JSON = fetchURL_CREST(query, testserver)
+			
 			#TODO: 0-fill missing dates
-			if len(price_JSON['items']) == 0: continue
+			if len(price_JSON['items']) == 0: 
+				write_progress('market_history',regionID,itemID)
+				continue
 			
 			data_to_write = []
 			for entry in price_JSON['items']:
@@ -183,13 +202,13 @@ def fetch_markethistory(trunc_regions=False, debug=False, testserver=False):
 				line_to_write.append(int(regionID))
 				line_to_write.append(entry['orderCount'])
 				line_to_write.append(entry['volume'])
-				line_to_write.append(entry['lowPrice'])
-				line_to_write.append(entry['highPrice'])
-				line_to_write.append(entry['avgPrice'])
+				line_to_write.append(float(entry['lowPrice']))
+				line_to_write.append(float(entry['highPrice']))
+				line_to_write.append(float(entry['avgPrice']))
 				data_to_write.append(line_to_write)
 			
 			writeSQL(data_cur,crest_pricehistory,price_history_headers,data_to_write)
-		sys.exit(1)
+			write_progress('market_history',regionID,itemID)
 
 def writeSQL(db_cur, table, headers_list, data_list, hard_overwrite=True, debug=False):
 	insert_statement = '''INSERT INTO %s (%s) VALUES''' % (table, ','.join(headers_list))
@@ -224,6 +243,7 @@ def writeSQL(db_cur, table, headers_list, data_list, hard_overwrite=True, debug=
 		print insert_statement
 	db_cur.execute(insert_statement)
 	db_cur.commit()
+	
 def fetchURL_CREST(query, testserver=False, debug=False):
 	#Returns parsed JSON of CREST query
 	real_query = ''
@@ -282,14 +302,45 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 		sys.exit(-2)
 	
 	return return_result
-
+	
 def _date_convert(date_str):
 	new_time = datetime.strptime(date_str,'%Y-%m-%dT%H:%M:%S')
 	return new_time.strftime('%Y-%m-%d')
+
+def recover_on_restart():
+	global crash_JSON
+	try:
+		tmp_filehandle = open(crash_filename,'r')
+		crash_JSON = json.load(tmp_filehandle)
+	except Exception as e:
+		crash_JSON = {}
+		print 'No recovery file found, starting fresh'
+		try:
+			tmp_filehandle.close()
+		except Exception as e:
+			None
+		return
+	
+	print 'Loading progress file %s' % crash_filename
+	tmp_filehandle.close()
+	return
+	
+def write_progress(subtable_name, key1, key2):
+	global crash_JSON
+	if subtable_name not in crash_JSON:
+		crash_JSON[subtable_name]={}
+		crash_JSON[subtable_name][key1]={}
+		crash_JSON[subtable_name][key1][key2]=0
+		
+	crash_JSON[subtable_name][key1][key2]=1
+	
+	with open(crash_filename,'w') as crash_file:
+		json.dump(crash_JSON,crash_file)
 	
 def main():
 	_validate_connection()
 	
+	recover_on_restart()
 	###FETCH PRICEHISTORY###
 	print "FETCHING CREST/MARKET_HISTORY"
 	fetch_markethistory(True,True)
