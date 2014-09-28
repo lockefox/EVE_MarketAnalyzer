@@ -153,8 +153,8 @@ def fetch_markethistory(trunc_regions=False, debug=False, testserver=False):
 					JOIN invgroups grp ON (conv.groupID = grp.groupID)
 					WHERE marketgroupid IS NOT NULL
 					AND conv.published = 1
-					AND grp.categoryid NOT IN (9,16)
-					AND grp.groupid NOT IN (30,659,485,485,873,883)''')
+					AND grp.categoryid NOT IN (9,16,350001,2)
+					AND grp.groupid NOT IN (30,659,485,485,873,883)''') #remove typeid NOT IN eventualy
 	item_list_tmp = sde_cur.fetchall()
 	item_list = []
 	for row in item_list_tmp:
@@ -176,7 +176,7 @@ def fetch_markethistory(trunc_regions=False, debug=False, testserver=False):
 		print regionName
 		
 		try:
-			if len(crash_JSON['market_history'][str(regionID)]) == len(item_list):
+			if len(crash_JSON['market_history'][str(regionID)]) >= len(item_list):
 				print '\tRegion Complete'
 		except KeyError as e:
 			None
@@ -304,7 +304,7 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 			break
 	else:
 		print headers
-		sys.exit(-2)
+		sys.exit(2)
 	
 	return return_result
 	
