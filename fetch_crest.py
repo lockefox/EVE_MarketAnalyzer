@@ -110,7 +110,7 @@ region_list = {
 trunc_region_list = {
 	'10000002':'The Forge',
 	'10000043':'Domain',
-	#'10000032':'Sinq Laison',
+	'10000032':'Sinq Laison',
 	'10000042':'Metropolis',
 	}
 	
@@ -149,9 +149,11 @@ def _initSQL(table_name, db_cur, db_conn, debug=False):
 	
 def fetch_markethistory(trunc_regions=False, debug=False, testserver=False):
 	sde_cur.execute('''SELECT typeid
-					FROM invtypes
+					FROM invtypes conv
+					JOIN invgroups grp ON (conv.groupID = grp.groupID)
 					WHERE marketgroupid IS NOT NULL
-					AND published = 1''')
+					AND conv.published = 1
+					AND grp.categoryID NOT IN (9)''')
 	item_list_tmp = sde_cur.fetchall()
 	item_list = []
 	for row in item_list_tmp:
@@ -186,15 +188,16 @@ def fetch_markethistory(trunc_regions=False, debug=False, testserver=False):
 					continue #already processed data
 			except KeyError as e:
 				None				
-			if debug: print query
+			
 			
 			price_JSON = fetchURL_CREST(query, testserver)
 			
 			#TODO: 0-fill missing dates
 			if len(price_JSON['items']) == 0: 
 				write_progress('market_history',regionID,itemID)
+				if debug: print '%s:\tEMPTY' % query
 				continue
-			
+			if debug: print query
 			data_to_write = []
 			for entry in price_JSON['items']:
 				line_to_write = []
@@ -266,13 +269,13 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 			headers = raw_response.headers
 			response = raw_response.read()
 		except urllib2.HTTPError as e:
-			print 'HTTPError:%s %s' % (e,url)
+			print 'HTTPError:%s %s' % (e,real_query)
 			continue
 		except urllib2.URLError as e:
-			print 'URLError:%s %s' % (e,url)
+			print 'URLError:%s %s' % (e,real_query)
 			continue
 		except socket.error as e:
-			print 'Socket Error:%s %s' % (e,url)
+			print 'Socket Error:%s %s' % (e,real_query)
 			continue
 		
 		do_gzip = False
@@ -288,10 +291,10 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 				zipper = gzip.GzipFile(fileobj=buf)
 				return_result = json.load(zipper)
 			except ValueError as e:
-				print "Empty response: retry %s" % url
+				print "Empty response: retry %s" % real_query
 				continue
 			except IOError as e:
-				print "gzip unreadable: Retry %s" %url
+				print "gzip unreadable: Retry %s" %real_query
 				continue
 			else:
 				break
@@ -332,7 +335,8 @@ def write_progress(subtable_name, key1, key2):
 		crash_JSON[subtable_name]={}
 		crash_JSON[subtable_name][key1]={}
 		crash_JSON[subtable_name][key1][key2]=0
-		
+	if key1 not in crash_JSON[subtable_name]:
+		crash_JSON[subtable_name][key1]={}
 	crash_JSON[subtable_name][key1][key2]=1
 	
 	with open(crash_filename,'w') as crash_file:
