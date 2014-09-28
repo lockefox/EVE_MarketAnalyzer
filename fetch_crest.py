@@ -153,7 +153,8 @@ def fetch_markethistory(trunc_regions=False, debug=False, testserver=False):
 					JOIN invgroups grp ON (conv.groupID = grp.groupID)
 					WHERE marketgroupid IS NOT NULL
 					AND conv.published = 1
-					AND grp.categoryID NOT IN (9)''')
+					AND grp.categoryid NOT IN (9,16)
+					AND grp.groupid NOT IN (30,659,485,485,873,883)''')
 	item_list_tmp = sde_cur.fetchall()
 	item_list = []
 	for row in item_list_tmp:
