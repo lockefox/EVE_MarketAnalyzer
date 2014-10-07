@@ -208,7 +208,7 @@ def dictify(header_list,data_list):
 	
 	return return_dict
 	
-def sigma_report(market_sigmas, days, region=10000002,debug=False):
+def sigma_report(market_sigmas, days, vol_floor = 100, region=10000002,debug=False):
 	print 'Fetching Short Volumes'
 	
 	if debug:
@@ -249,45 +249,48 @@ def sigma_report(market_sigmas, days, region=10000002,debug=False):
 		flag_HIsigma = False
 		flag_LOsigma = False
 		#Flag "most extreme" sigma
-		for value in vol_list:
-			#This is bad.  Make it better
-			try:
-				market_sigmas[typeid]
-			except KeyError as e:
-				break
-			if value > market_sigmas[typeid]['SIG_2P5']:
-				if flag_HIsigma == False:
-					result_dict['SIG_2P5'].append(typeid)
-					flag_HIsigma = True
-			if value > market_sigmas[typeid]['SIG_2P0']:
-				if flag_HIsigma == False:
-					result_dict['SIG_2P0'].append(typeid)
-					flag_HIsigma = True
-			#if value > market_sigmas[typeid]['SIG_1P5']:
-			#	if flag_HIsigma == False:
-			#		result_dict['SIG_1P5'].append(typeid)
-			#		flag_HIsigma = True
-			#if value > market_sigmas[typeid]['SIG_1P0']:
-			#	if flag_HIsigma == False:
-			#		result_dict['SIG_1P0'].append(typeid)
-			#		flag_HIsigma = True
-					
-			if value < market_sigmas[typeid]['SIG_N2P5']:
-				if flag_LOsigma == False:
-					result_dict['SIG_N2P5'].append(typeid)
-					flag_LOsigma = True
-			if value < market_sigmas[typeid]['SIG_N2P0']:
-				if flag_LOsigma == False:
-					result_dict['SIG_N2P0'].append(typeid)
-					flag_LOsigma = True
-			#if value < market_sigmas[typeid]['SIG_N1P5']:
-			#	if flag_LOsigma == False:
-			#		result_dict['SIG_N1P5'].append(typeid)
-			#		flag_LOsigma = True
-			#if value < market_sigmas[typeid]['SIG_N1P0']:
-			#	if flag_LOsigma == False:
-			#		result_dict['SIG_N1P0'].append(typeid)
-			#		flag_LOsigma = True
+		#for value in vol_list:
+		value = numpy.average(vol_list)
+		if value < vol_floor:
+			continue
+		#This is bad.  Make it better
+		try:
+			market_sigmas[typeid]
+		except KeyError as e:
+			continue
+		if value > market_sigmas[typeid]['SIG_2P5']:
+			if flag_HIsigma == False:
+				result_dict['SIG_2P5'].append(typeid)
+				flag_HIsigma = True
+		if value > market_sigmas[typeid]['SIG_2P0']:
+			if flag_HIsigma == False:
+				result_dict['SIG_2P0'].append(typeid)
+				flag_HIsigma = True
+		#if value > market_sigmas[typeid]['SIG_1P5']:
+		#	if flag_HIsigma == False:
+		#		result_dict['SIG_1P5'].append(typeid)
+		#		flag_HIsigma = True
+		#if value > market_sigmas[typeid]['SIG_1P0']:
+		#	if flag_HIsigma == False:
+		#		result_dict['SIG_1P0'].append(typeid)
+		#		flag_HIsigma = True
+				
+		if value < market_sigmas[typeid]['SIG_N2P5']:
+			if flag_LOsigma == False:
+				result_dict['SIG_N2P5'].append(typeid)
+				flag_LOsigma = True
+		if value < market_sigmas[typeid]['SIG_N2P0']:
+			if flag_LOsigma == False:
+				result_dict['SIG_N2P0'].append(typeid)
+				flag_LOsigma = True
+		#if value < market_sigmas[typeid]['SIG_N1P5']:
+		#	if flag_LOsigma == False:
+		#		result_dict['SIG_N1P5'].append(typeid)
+		#		flag_LOsigma = True
+		#if value < market_sigmas[typeid]['SIG_N1P0']:
+		#	if flag_LOsigma == False:
+		#		result_dict['SIG_N1P0'].append(typeid)
+		#		flag_LOsigma = True
 	return result_dict			
 
 def main():
