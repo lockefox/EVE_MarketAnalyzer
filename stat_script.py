@@ -235,13 +235,13 @@ def sigma_report(market_sigmas, days, region=10000002,debug=False):
 	##TODO: make this dynamic
 	result_dict['SIG_N2P5']=[]
 	result_dict['SIG_N2P0']=[]
-	result_dict['SIG_N1P5']=[]
-	result_dict['SIG_N1P0']=[]
+	#result_dict['SIG_N1P5']=[]
+	#result_dict['SIG_N1P0']=[]
 	#result_dict['SIG_N0P5']=[]	NO NEED TO FLAG MEDIAN SIGMAS
 	#result_dict['SIG_0P0']=[]
 	#result_dict['SIG_0P5']=[]
-	result_dict['SIG_1P0']=[]
-	result_dict['SIG_1P5']=[]
+	#result_dict['SIG_1P0']=[]
+	#result_dict['SIG_1P5']=[]
 	result_dict['SIG_2P0']=[]
 	result_dict['SIG_2P5']=[]
 	
@@ -263,14 +263,14 @@ def sigma_report(market_sigmas, days, region=10000002,debug=False):
 				if flag_HIsigma == False:
 					result_dict['SIG_2P0'].append(typeid)
 					flag_HIsigma = True
-			if value > market_sigmas[typeid]['SIG_1P5']:
-				if flag_HIsigma == False:
-					result_dict['SIG_1P5'].append(typeid)
-					flag_HIsigma = True
-			if value > market_sigmas[typeid]['SIG_1P0']:
-				if flag_HIsigma == False:
-					result_dict['SIG_1P0'].append(typeid)
-					flag_HIsigma = True
+			#if value > market_sigmas[typeid]['SIG_1P5']:
+			#	if flag_HIsigma == False:
+			#		result_dict['SIG_1P5'].append(typeid)
+			#		flag_HIsigma = True
+			#if value > market_sigmas[typeid]['SIG_1P0']:
+			#	if flag_HIsigma == False:
+			#		result_dict['SIG_1P0'].append(typeid)
+			#		flag_HIsigma = True
 					
 			if value < market_sigmas[typeid]['SIG_N2P5']:
 				if flag_LOsigma == False:
@@ -280,14 +280,14 @@ def sigma_report(market_sigmas, days, region=10000002,debug=False):
 				if flag_LOsigma == False:
 					result_dict['SIG_N2P0'].append(typeid)
 					flag_LOsigma = True
-			if value < market_sigmas[typeid]['SIG_N1P5']:
-				if flag_LOsigma == False:
-					result_dict['SIG_N1P5'].append(typeid)
-					flag_LOsigma = True
-			if value < market_sigmas[typeid]['SIG_N1P0']:
-				if flag_LOsigma == False:
-					result_dict['SIG_N1P0'].append(typeid)
-					flag_LOsigma = True
+			#if value < market_sigmas[typeid]['SIG_N1P5']:
+			#	if flag_LOsigma == False:
+			#		result_dict['SIG_N1P5'].append(typeid)
+			#		flag_LOsigma = True
+			#if value < market_sigmas[typeid]['SIG_N1P0']:
+			#	if flag_LOsigma == False:
+			#		result_dict['SIG_N1P0'].append(typeid)
+			#		flag_LOsigma = True
 	return result_dict			
 
 def main():
