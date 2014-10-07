@@ -36,7 +36,7 @@ sde_conn  = pypyodbc.connect('DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABA
 	% (db_driver,db_host,db_port,db_user,db_pw,sde_schema))
 sde_cur = sde_conn.cursor()
 
-def market_volume_report():
+def market_volume_report(region=10000002):
 	sde_cur.execute('''SELECT typeid,typename
 						FROM invtypes
 						WHERE marketgroupid IS NOT NULL
@@ -49,8 +49,8 @@ def market_volume_report():
 	print 'Fetching Volumes'
 	data_cur.execute('''SELECT itemid,volume
 						FROM crest_markethistory
-						WHERE regionid = 10000002
-						AND price_date > NOW() - INTERVAL 366 DAY''')
+						WHERE regionid = %s
+						AND price_date > NOW() - INTERVAL 366 DAY''' %region)
 	raw_data = data_cur.fetchall()
 	data_dict = {}
 	for row in raw_data:
@@ -124,8 +124,39 @@ def market_volume_report():
 		outstr = outstr[:-1]
 		outfile.write('%s\n' % (outstr))
 	outfile.close()	
-def main():
-	market_volume_report()
+	
+	return_obj = dictify(print_array[0],print_array[1:])
+	return return_obj
+	
+def dictify(header_list,data_list):
+	return_dict = {}
+	for row in data_list:
+		return_dict[row[0]] = {}
+		header_index = 0
+		for col in header_list:
+			return_dict[row[0]][col] = row[header_index]
+			header_index += 1
+	
+	return return_dict
+	
+def sigma_report(market_sigmas, days, region=10000002):
+	print 'Fetching Volumes'
+	data_cur.execute('''SELECT itemid,volume
+						FROM crest_markethistory
+						WHERE regionid = %s
+						AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL %s DAY''' %(region,days)
+	raw_data = data_cur.fetchall()
+	data_dict = {}
+	for row in raw_data:
+		if row[0] not in data_dict:
+			data_dict[row[0]] = []
+		data_dict[row[0]].append(row[1])
+	
 
+
+def main():
+	market_sigmas = market_volume_report()
+	sigma_report(market_sigmas, 15)
+	
 if __name__ == "__main__":
 	main()
