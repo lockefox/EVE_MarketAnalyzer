@@ -259,6 +259,8 @@ def build_header (report_sigmas,standard_stats = True)
 		sigma_str = '%s%sP%s' % (sigma_str,int(abs(integer)),int(abs(decimal*10)))
 			#Like SIG_N2P5 or SIG_2P5
 	
+	return header
+	
 def dictify(header_list,data_list):
 	return_dict = {}
 	for row in data_list:
