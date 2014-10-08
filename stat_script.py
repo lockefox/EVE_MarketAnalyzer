@@ -139,82 +139,16 @@ def market_volume_report(report_sigmas, region=10000002,debug=False):
 	
 	print_array.append(header)
 	
+	expected_length = len(data_dict[34])	#TRITANIUM expected to be complete for queried range
 	for itemID,vol_array in data_dict.iteritems():
 		data_row = []
-		data_row.append(itemID)
 		try:
 			data_row.append(convert[itemID])
 		except KeyError as e:
 			print 'typeID %s not found' % itemID
 			continue
-		data_row.append(len(vol_array))
-		data_row.append(numpy.amin(vol_array))
 		
-		entries_returned = len(vol_array)
-		if len(vol_array) < 365:
-			for range in (0, 364-len(vol_array)):
-				vol_array.append(0)
-		
-		data_row.append(numpy.percentile(vol_array,10))
-		data_row.append(numpy.median(vol_array))
-		data_row.append(numpy.average(vol_array))
-		data_row.append(numpy.percentile(vol_array,90))
-		data_row.append(numpy.amax(vol_array))
-		data_row.append(numpy.std(vol_array))
-		
-		##TODO: this is bad, and needs to be automated
-		## IF(num > sig_threshold): save
-		if entries_returned < SIG_2P5:
-			data_row.append(None)
-		else:
-			data_row.append(numpy.percentile(vol_array,0.62))
-		
-		if entries_returned < SIG_2P0:
-			data_row.append(None)
-		else:
-			data_row.append(numpy.percentile(vol_array,2.28))
-		
-		if entries_returned < SIG_1P5:
-			data_row.append(None)
-		else:
-			data_row.append(numpy.percentile(vol_array,6.68))
-		
-		if entries_returned < SIG_1P0:
-			data_row.append(None)
-		else:
-			data_row.append(numpy.percentile(vol_array,15.87))
-		
-		if entries_returned < SIG_0P5:
-			data_row.append(None)
-		else:
-			data_row.append(numpy.percentile(vol_array,30.85))
-			
-		data_row.append(numpy.percentile(vol_array,50))
-		
-		if entries_returned < SIG_0P5:
-			data_row.append(None)
-		else:
-			data_row.append(numpy.percentile(vol_array,69.15))	
-			
-		if entries_returned < SIG_1P0:
-			data_row.append(None)
-		else:
-			data_row.append(numpy.percentile(vol_array,84.13))
-		
-		if entries_returned < SIG_1P5:
-			data_row.append(None)
-		else:
-			data_row.append(numpy.percentile(vol_array,93.32))
-		
-		if entries_returned < SIG_2P0:
-			data_row.append(None)
-		else:
-			data_row.append(numpy.percentile(vol_array,97.72))
-		
-		if entries_returned < SIG_2P5:
-			data_row.append(None)
-		else:
-			data_row.append(numpy.percentile(vol_array,99.38))
+		data_row = crunch_item_stats(itemID, vol_array, expected_length, report_sigmas)
 		
 		print_array.append(data_row)
 	
@@ -256,10 +190,44 @@ def build_header (report_sigmas,standard_stats = True)
 		if integer < 0:
 			sigma_str = '%sN' % sigma_str
 		
-		sigma_str = '%s%sP%s' % (sigma_str,int(abs(integer)),int(abs(decimal*10)))
-			#Like SIG_N2P5 or SIG_2P5
-	
+		sigma_str = '%s%sP%s' % (sigma_str,int(abs(integer)),int(abs(decimal*10))) #Like SIG_N2P5 or SIG_2P5	
+		header.append(sigma_str)
+		
 	return header
+	
+def crunch_item_stats(itemid, vol_list, expected_length, report_sigmas, standard_stats = True):
+	results_array = []
+	data_array = vol_list
+	n_count = len(vol_list)
+	results_array.append(itemid)
+	results_array.append(convert[itemid])
+	results_array.append(n_count)
+	
+	if n_count < expected_length:	#append zeros to make sigmas match sample size
+		for range in (0, expected_length - n_count):
+			data_array.append(0)
+			
+	if standard_stats:
+		results_array.append(numpy.percentile(data_array,10))
+		results_array.append(numpy.median(data_array))
+		results_array.append(numpy.average(data_array))
+		results_array.append(numpy.percentile(data_array,90))
+		results_array.append(numpy.amax(data_array))
+		results_array.append(numpy.std(data_array))
+	
+	for sigma in report_sigmas:
+		try:
+			sigma_to_percentile[sigma]
+		except KeyError as e:
+			print 'Sigma: %s not covered' % sigma_num
+			sys.exit(2)
+			
+		if n_count < (1/sigma_to_percentile[sigma]):	#Not enough samples to report sigma value
+			results_array.append(None)
+		else:
+			results_array.append(numpy.percentile(data_array,(1/sigma_to_percentile[sigma])))
+	
+	return results_array
 	
 def dictify(header_list,data_list):
 	return_dict = {}
