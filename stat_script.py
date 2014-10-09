@@ -99,7 +99,7 @@ sde_conn  = pypyodbc.connect('DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABA
 	% (db_driver,db_host,db_port,db_user,db_pw,sde_schema))
 sde_cur = sde_conn.cursor()
 
-def market_volume_report(report_sigmas, region=10000002,debug=True):
+def market_volume_report(report_sigmas, region=10000002,debug=False):
 	global convert
 	
 	sde_cur.execute('''SELECT typeid,typename
@@ -239,7 +239,7 @@ def crunch_item_stats(itemid, vol_list, expected_length, report_sigmas, standard
 				percent = 1-(sigma_to_percentile[-sigma])
 			else:
 				percent = sigma_to_percentile[sigma]
-			results_array.append(numpy.percentile(data_array,percent*10))
+			results_array.append(numpy.percentile(data_array,percent*100))
 	
 	return results_array
 	
@@ -254,7 +254,7 @@ def dictify(header_list,data_list):
 	
 	return return_dict
 	
-def sigma_report(market_sigmas, days, vol_floor = 100, region=10000002,debug=True):
+def sigma_report(market_sigmas, days, vol_floor = 100, region=10000002,debug=False):
 	print 'Fetching Short Volumes'
 	
 	if debug:
