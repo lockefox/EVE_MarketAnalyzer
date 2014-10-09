@@ -188,15 +188,19 @@ def build_header (report_sigmas,standard_stats = True):
 			except KeyError as e:
 				print 'Sigma: %s not covered' % sigma_num
 				sys.exit(2)
-		
-		(decimal, integer) = math.modf(sigma_num)
-		if integer < 0:
-			sigma_str = '%sN' % sigma_str
-		
-		sigma_str = '%s%sP%s' % (sigma_str,int(abs(integer)),int(abs(decimal*10))) #Like SIG_N2P5 or SIG_2P5	
+		sigma_str = sig_int_to_str(sigma_num)
 		header.append(sigma_str)
 		
 	return header
+	
+def sig_int_to_str(sigma_value):
+	sigma_str = 'SIG_'
+	(decimal, integer) = math.modf(sigma_num)
+	if integer < 0:
+		sigma_str = '%sN' % sigma_str
+		
+	sigma_str = '%s%sP%s' % (sigma_str,int(abs(integer)),int(abs(decimal*10))) #Like SIG_N2P5 or SIG_2P5	
+	return sigma_str
 	
 def crunch_item_stats(itemid, vol_list, expected_length, report_sigmas, standard_stats = True):
 	results_array = []
@@ -254,7 +258,7 @@ def dictify(header_list,data_list):
 	
 	return return_dict
 	
-def sigma_report(market_sigmas, days, vol_floor = 100, region=10000002,debug=False):
+def sigma_report(market_sigmas, filter_sigmas, days, vol_floor = 100, region=10000002,debug=False):
 	print 'Fetching Short Volumes'
 	
 	if debug:
@@ -362,7 +366,7 @@ def main():
 	]
 	
 	market_sigmas = market_volume_report(report_sigmas)
-	flaged_items = sigma_report(market_sigmas, 15)
+	flaged_items = sigma_report(market_sigmas, filter_sigmas, 15)
 	
 	#print flaged_items
 	outfile = open('sig_flags.txt','w')
