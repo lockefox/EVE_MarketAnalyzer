@@ -1,4 +1,13 @@
 {
+	"plot_defaults":{
+		"width":800,
+		"height":600,
+		"format":"png"
+	},
+	"default_args":{
+		"quantmod":"addBBands();addMACD(5,15,5)",
+		"subset":"last 12 weeks"
+	},
 	"forced_plots":{
 		"minerals":[
 			34,
