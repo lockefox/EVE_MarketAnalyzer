@@ -6,7 +6,8 @@ library(rjson)
 library(quantmod)
 
 local_path = 'K:\\scripts\\EVE_MarketAnalyzer\\'
-config <- fromJSON(file=paste(local_path,'chart_list.json', sep=''))#make this dynamic
+setwd(local_path)
+config <- fromJSON(file='chart_list.json')#make this dynamic
 
 for (group in config$forced_plots)
 {
