@@ -315,7 +315,7 @@ def sigma_report(market_sigmas, filter_sigmas, days, vol_floor = 100, region=100
 		#check positive sigmas
 		for sigma in filter_sigmas:
 			if sigma <=0:
-				break	#do negative sigmas first
+				break	#don't do SIG0
 			sig_str = sig_int_to_str(sigma)
 			flag_limit = market_sigmas[typeid][sig_str]
 			if avg_value > flag_limit:
