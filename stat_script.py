@@ -278,69 +278,50 @@ def sigma_report(market_sigmas, filter_sigmas, days, vol_floor = 100, region=100
 		if row[0] not in data_dict:
 			data_dict[row[0]] = []
 		data_dict[row[0]].append(row[1])
-	#print data_dict
-	#print market_sigmas
-
-	result_dict = {}
-	##TODO: make this dynamic
-	result_dict['SIG_N2P5']=[]
-	result_dict['SIG_N2P0']=[]
-	#result_dict['SIG_N1P5']=[]
-	#result_dict['SIG_N1P0']=[]
-	#result_dict['SIG_N0P5']=[]	NO NEED TO FLAG MEDIAN SIGMAS
-	#result_dict['SIG_0P0']=[]
-	#result_dict['SIG_0P5']=[]
-	#result_dict['SIG_1P0']=[]
-	#result_dict['SIG_1P5']=[]
-	result_dict['SIG_2P0']=[]
-	result_dict['SIG_2P5']=[]
 	
+	#Build pseudo-header for report.  Top level keys for return dict
+	result_dict = {}
+	filter_sigmas.sort()
+	if (0 in filter_sigmas) || (0.0 in filter_sigmas):
+			print '0 Sigma (MED) not supported'
+			#Not sure if > or < than MED for flagging.  Do MED flagging in another function
+	for sigma in filter_sigmas:
+		sig_str = sig_int_to_str(sigma)
+		result_dict[sig_str] = []
+
+	print 'Parsing data'
 	for typeid,vol_list in data_dict.iteritems():
-		flag_HIsigma = False
-		flag_LOsigma = False
-		#Flag "most extreme" sigma
-		#for value in vol_list:
-		value = numpy.average(vol_list)
+		flag_HIsigma = False	
+		avg_value = numpy.average(vol_list)
 		if value < vol_floor:
-			continue
-		#This is bad.  Make it better
+			continue	#filter out very low volumes
 		try:
 			market_sigmas[typeid]
 		except KeyError as e:
 			continue
-		if value > market_sigmas[typeid]['SIG_2P5']:
-			if flag_HIsigma == False:
-				result_dict['SIG_2P5'].append(typeid)
-				flag_HIsigma = True
-		if value > market_sigmas[typeid]['SIG_2P0']:
-			if flag_HIsigma == False:
-				result_dict['SIG_2P0'].append(typeid)
-				flag_HIsigma = True
-		#if value > market_sigmas[typeid]['SIG_1P5']:
-		#	if flag_HIsigma == False:
-		#		result_dict['SIG_1P5'].append(typeid)
-		#		flag_HIsigma = True
-		#if value > market_sigmas[typeid]['SIG_1P0']:
-		#	if flag_HIsigma == False:
-		#		result_dict['SIG_1P0'].append(typeid)
-		#		flag_HIsigma = True
-				
-		if value < market_sigmas[typeid]['SIG_N2P5']:
-			if flag_LOsigma == False:
-				result_dict['SIG_N2P5'].append(typeid)
-				flag_LOsigma = True
-		if value < market_sigmas[typeid]['SIG_N2P0']:
-			if flag_LOsigma == False:
-				result_dict['SIG_N2P0'].append(typeid)
-				flag_LOsigma = True
-		#if value < market_sigmas[typeid]['SIG_N1P5']:
-		#	if flag_LOsigma == False:
-		#		result_dict['SIG_N1P5'].append(typeid)
-		#		flag_LOsigma = True
-		#if value < market_sigmas[typeid]['SIG_N1P0']:
-		#	if flag_LOsigma == False:
-		#		result_dict['SIG_N1P0'].append(typeid)
-		#		flag_LOsigma = True
+		
+		filter_sigmas.sort()
+		#check negative sigmas
+		for sigma in filter_sigmas:
+			if sigma >=0:
+				break	#do negative sigmas first
+			sig_str = sig_int_to_str(sigma)
+			flag_limit = market_sigmas[typeid][sig_str]
+			if avg_value < flag_limit:
+				result_dict[sig_str].append(typeid)
+				break #most extreme sigma found, stop looking
+		
+		filter_sigmas.sort(reverse=True)
+		#check positive sigmas
+		for sigma in filter_sigmas:
+			if sigma <=0:
+				break	#do negative sigmas first
+			sig_str = sig_int_to_str(sigma)
+			flag_limit = market_sigmas[typeid][sig_str]
+			if avg_value > flag_limit:
+				result_dict[sig_str].append(typeid)
+				break #most extreme sigma found, stop looking
+	
 	return result_dict			
 
 def main():
@@ -381,5 +362,6 @@ def main():
 			outfile.write('\t%s,%s\n' % (item,itemname))
 		
 	outfile.close()
+	
 if __name__ == "__main__":
 	main()
