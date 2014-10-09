@@ -2,7 +2,12 @@
 	"plot_defaults":{
 		"width":800,
 		"height":600,
-		"format":"png"
+		"format":"png",
+		"db_schema":"oceanus-1.0-105658",
+		"db_host":"127.0.0.1",
+		"db_user":"root",
+		"db_pw":"bar",
+		"db_port":3306
 	},
 	"default_args":{
 		"quantmod":"addBBands();addMACD(5,15,5)",
