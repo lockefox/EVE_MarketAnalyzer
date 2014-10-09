@@ -99,7 +99,7 @@ sde_conn  = pypyodbc.connect('DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABA
 	% (db_driver,db_host,db_port,db_user,db_pw,sde_schema))
 sde_cur = sde_conn.cursor()
 
-def market_volume_report(report_sigmas, region=10000002,debug=False):
+def market_volume_report(report_sigmas, region=10000002,debug=True):
 	global convert
 	
 	sde_cur.execute('''SELECT typeid,typename
@@ -136,7 +136,7 @@ def market_volume_report(report_sigmas, region=10000002,debug=False):
 	print_array = []
 	header = []
 	header = build_header(report_sigmas)
-	
+	#if debug: print header
 	print_array.append(header)
 	
 	expected_length = len(data_dict[34])	#TRITANIUM expected to be complete for queried range
@@ -165,7 +165,7 @@ def market_volume_report(report_sigmas, region=10000002,debug=False):
 	return_obj = dictify(print_array[0],print_array[1:])
 	return return_obj
 
-def build_header (report_sigmas,standard_stats = True)
+def build_header (report_sigmas,standard_stats = True):
 	header = []
 	header.append('typeid')
 	header.append('typename')
@@ -181,10 +181,13 @@ def build_header (report_sigmas,standard_stats = True)
 	for sigma_num in report_sigmas:
 		sigma_str = 'SIG_'
 		try:
-			sigma_to_perfentile[sigma_num]
+			sigma_to_percentile[sigma_num]
 		except KeyError as e:
-			print 'Sigma: %s not covered' % sigma_num
-			sys.exit(2)
+			try:
+				sigma_to_percentile[-sigma_num]
+			except KeyError as e:
+				print 'Sigma: %s not covered' % sigma_num
+				sys.exit(2)
 		
 		(decimal, integer) = math.modf(sigma_num)
 		if integer < 0:
@@ -208,6 +211,7 @@ def crunch_item_stats(itemid, vol_list, expected_length, report_sigmas, standard
 			data_array.append(0)
 			
 	if standard_stats:
+		results_array.append(numpy.amin(data_array))
 		results_array.append(numpy.percentile(data_array,10))
 		results_array.append(numpy.median(data_array))
 		results_array.append(numpy.average(data_array))
@@ -216,16 +220,26 @@ def crunch_item_stats(itemid, vol_list, expected_length, report_sigmas, standard
 		results_array.append(numpy.std(data_array))
 	
 	for sigma in report_sigmas:
+		pos_sigma = False
 		try:
 			sigma_to_percentile[sigma]
 		except KeyError as e:
-			print 'Sigma: %s not covered' % sigma_num
-			sys.exit(2)
+			pos_sigma = True # lookup only covers negative sigmas.  some weirness required for positive ones
+			try:
+				sigma_to_percentile[-sigma]
+			except KeyError as e:
+				print 'Sigma: %s not covered' % sigma
+				sys.exit(2)
 			
-		if n_count < (1/sigma_to_percentile[sigma]):	#Not enough samples to report sigma value
+		if n_count < (1/sigma_to_percentile[-abs(sigma)]):	#Not enough samples to report sigma value
 			results_array.append(None)
 		else:
-			results_array.append(numpy.percentile(data_array,(1/sigma_to_percentile[sigma])))
+			percent = 0.0
+			if pos_sigma:
+				percent = 1-(sigma_to_percentile[-sigma])
+			else:
+				percent = sigma_to_percentile[sigma]
+			results_array.append(numpy.percentile(data_array,percent*10))
 	
 	return results_array
 	
@@ -240,7 +254,7 @@ def dictify(header_list,data_list):
 	
 	return return_dict
 	
-def sigma_report(market_sigmas, days, vol_floor = 100, region=10000002,debug=False):
+def sigma_report(market_sigmas, days, vol_floor = 100, region=10000002,debug=True):
 	print 'Fetching Short Volumes'
 	
 	if debug:
