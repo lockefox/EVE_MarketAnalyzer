@@ -1,6 +1,6 @@
 {
 	"plot_defaults":{
-		"width":800,
+		"width":1000,
 		"height":600,
 		"format":"png",
 		"db_schema":"oceanus-1.0-105658",
