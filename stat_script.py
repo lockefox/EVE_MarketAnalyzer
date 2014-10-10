@@ -75,12 +75,6 @@ sigma_to_percentile = {
 	-0.1:0.460172163,
 	0   :0.5
 }
-SIG_3P0 = 769
-SIG_2P5 = 161
-SIG_2P0 = 44
-SIG_1P5 = 15
-SIG_1P0 = 6 
-SIG_0P5 = 3
 
 convert = {}
 	
