@@ -2,7 +2,8 @@ required_packages <- c('rjson','quantmod','data.table')
 new_packages <- required_packages[!(required_packages %in% installed.packages()[,'Package'])]
 if(length(new_packages)) install.packages(new_packages)
 
-library(rjson)
+#library(rjson)
+library(jsonlite)
 library(quantmod)
 library(data.table)
 #library(RMySQL)
