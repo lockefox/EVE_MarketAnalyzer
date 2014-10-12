@@ -79,7 +79,7 @@ sigma_to_percentile = {
 }
 
 convert = {}
-	
+global_debug = int(conf.get('STATS','debug'))
 db_host   = conf.get('GLOBALS','db_host')
 db_user   = conf.get('GLOBALS','db_user')
 db_pw     = conf.get('GLOBALS','db_pw')
@@ -95,7 +95,7 @@ sde_conn  = pypyodbc.connect('DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABA
 	% (db_driver,db_host,db_port,db_user,db_pw,sde_schema))
 sde_cur = sde_conn.cursor()
 
-def market_volume_report(report_sigmas, region=10000002,debug=False):
+def market_volume_report(report_sigmas, region=10000002,debug=global_debug):
 	print 'Fetching Volumes'
 	if debug:
 		data_cur.execute('''SELECT itemid,volume
@@ -178,7 +178,7 @@ def build_header (report_sigmas,standard_stats = True):
 	
 def sig_int_to_str(sigma_value):
 	sigma_str = 'SIG_'
-	(decimal, integer) = math.modf(sigma_num)
+	(decimal, integer) = math.modf(sigma_value)
 	if integer < 0:
 		sigma_str = '%sN' % sigma_str
 		
@@ -241,7 +241,7 @@ def dictify(header_list,data_list):
 	
 	return return_dict
 	
-def sigma_report(market_sigmas, filter_sigmas, days, vol_floor = 100, region=10000002,debug=False):
+def sigma_report(market_sigmas, filter_sigmas, days, vol_floor = 100, region=10000002,debug=global_debug):
 	print 'Fetching Short Volumes'
 	
 	if debug:
@@ -276,7 +276,7 @@ def sigma_report(market_sigmas, filter_sigmas, days, vol_floor = 100, region=100
 	for typeid,vol_list in data_dict.iteritems():
 		flag_HIsigma = False	
 		avg_value = numpy.average(vol_list)
-		if value < vol_floor:
+		if avg_value < vol_floor:
 			continue	#filter out very low volumes
 		try:
 			market_sigmas[typeid]
@@ -365,6 +365,7 @@ def plot_forced_group(region=10000002):
 				
 			#print R_command
 			robjects.r(R_command)
+
 def main():
 	report_sigmas = [
 		-2.5,
@@ -383,11 +384,13 @@ def main():
 	filter_sigmas = [
 		-2.5,
 		-2.0,
+		-1.5,
+		 1.5,
 		 2.0,
 		 2.5
 	]
 	global convert
-	
+	print 'Fetching item list from SDE: %s' % sde_schema
 	sde_cur.execute('''SELECT typeid,typename
 						FROM invtypes conv
 						JOIN invgroups grp ON (conv.groupID = grp.groupID)
@@ -399,8 +402,6 @@ def main():
 	for row in tmp_convlist:
 		convert[row[0]]=row[1]
 		
-	plot_forced_group()
-	sys.exit()
 	market_sigmas = market_volume_report(report_sigmas)
 	flaged_items = sigma_report(market_sigmas, filter_sigmas, 15)
 	
@@ -417,6 +418,8 @@ def main():
 			outfile.write('\t%s,%s\n' % (item,itemname))
 		
 	outfile.close()
+	
+	if not global_debug: plot_forced_group()
 	
 if __name__ == "__main__":
 	main()
