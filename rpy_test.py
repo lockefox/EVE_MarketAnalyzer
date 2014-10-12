@@ -28,14 +28,43 @@ sde_cur = sde_conn.cursor()
 convert = {}
 
 def main():
-	pi = robjects.r['pi']
-	print pi
+	global convert
+	#pi = robjects.r['pi']
+	#print pi
+	
+	###R Modules###
+	#Must be installed in R first. 
 	importr('jsonlite')
 	importr('quantmod',robject_translations = {'skeleton.TA':'skeletonTA'})
 	importr('data.table')
+	
+	R_config_file = open(conf.get('STATS','R_config_file'),'r')
+	R_todo = json.load(R_config_file)
+	
+	#R_date = robjects.r('Sys.Date()')
+	#print str(R_date)
+	today = datetime.now().strftime('%Y-%m-%d')
+	if not os.path.exists('plots/%s' % today):
+		os.makedirs('plots/%s' % today)
+		
+	sde_cur.execute('''SELECT typeid,typename
+						FROM invtypes conv
+						JOIN invgroups grp ON (conv.groupID = grp.groupID)
+						WHERE marketgroupid IS NOT NULL
+						AND conv.published = 1''')
+	tmp_convlist = sde_cur.fetchall()
+	for row in tmp_convlist:
+		convert[row[0]]=row[1]
+	today = datetime.now().strftime('%Y-%m-%d')
+	print today	
+	sys.exit()
+	for group,item_list in R_todo['forced_plots'].iteritems():
+		dump_path = 'plots\\%s\\%s' % (R_date,group)
+		if not os.path.exists(dump_path):
+			os.makedirs(dump_path)
+		sys.exit()
 	robjects.r('''
 		query_str <- paste('http://public-crest.eveonline.com/market/10000002/types/',29668,'/history/',sep='')
-		print(query_str)
 		market.json <- fromJSON(readLines(query_str))
 		market.data <- data.table(market.json$items)
 	

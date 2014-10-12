@@ -7,6 +7,8 @@ import ConfigParser
 import pypyodbc
 from datetime import datetime
 import numpy
+import rpy2.robjects as robjects
+from rpy2.robjects.packages import importr
 
 conf = ConfigParser.ConfigParser()
 conf.read(['init.ini','init_local.ini'])
@@ -94,19 +96,6 @@ sde_conn  = pypyodbc.connect('DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABA
 sde_cur = sde_conn.cursor()
 
 def market_volume_report(report_sigmas, region=10000002,debug=False):
-	global convert
-	
-	sde_cur.execute('''SELECT typeid,typename
-						FROM invtypes conv
-						JOIN invgroups grp ON (conv.groupID = grp.groupID)
-						WHERE marketgroupid IS NOT NULL
-						AND conv.published = 1
-						AND grp.categoryid NOT IN (9,16,350001,2)
-						AND grp.groupid NOT IN (30,659,485,485,873,883)''')
-	tmp_convlist = sde_cur.fetchall()
-	for row in tmp_convlist:
-		convert[row[0]]=row[1]
-	
 	print 'Fetching Volumes'
 	if debug:
 		data_cur.execute('''SELECT itemid,volume
@@ -276,7 +265,7 @@ def sigma_report(market_sigmas, filter_sigmas, days, vol_floor = 100, region=100
 	#Build pseudo-header for report.  Top level keys for return dict
 	result_dict = {}
 	filter_sigmas.sort()
-	if (0 in filter_sigmas) || (0.0 in filter_sigmas):
+	if (0 in filter_sigmas) or (0.0 in filter_sigmas):
 			print '0 Sigma (MED) not supported'
 			#Not sure if > or < than MED for flagging.  Do MED flagging in another function
 	for sigma in filter_sigmas:
@@ -318,6 +307,64 @@ def sigma_report(market_sigmas, filter_sigmas, days, vol_floor = 100, region=100
 	
 	return result_dict			
 
+def plot_forced_group(region=10000002):
+	print 'Setting up R libraries'
+	importr('jsonlite')
+	importr('quantmod',robject_translations = {'skeleton.TA':'skeletonTA'})
+	importr('data.table')
+	
+	print 'setting up dump path'
+	R_config_file = open(conf.get('STATS','R_config_file'),'r')
+	R_todo = json.load(R_config_file)
+	
+	img_type = conf.get('STATS','format')
+	img_X = conf.get('STATS','plot_width')
+	img_Y = conf.get('STATS','plot_height')
+	
+	default_TA = conf.get('STATS','default_quantmod')
+	default_subset = conf.get('STATS','default_subset')
+	
+	crest_path = conf.get('CREST','default_path')
+	today = datetime.now().strftime('%Y-%m-%d')
+	
+	if not os.path.exists('plots/%s' % today):
+		os.makedirs('plots/%s' % today)
+	
+	for group, item_list in R_todo['forced_plots'].iteritems():
+		print 'crunching %s' % group
+		dump_path = 'plots/%s/%s' % (today, group)
+		if not os.path.exists(dump_path):
+			os.makedirs(dump_path)
+			
+		for itemid in item_list:
+			query_str = '%smarket/%s/types/%s/history/' % (crest_path, region, itemid)
+			item_name = convert[itemid]
+			if itemid == 29668:
+				item_name = 'PLEX'	#Hard override, because PLEX name is dumb
+			img_path = '%s/%s_%s.%s' % (dump_path, item_name, today,img_type)
+			plot_title = '%s %s' % (item_name, today)
+			
+			R_command = '''
+				market.json <- fromJSON(readLines('%s'))
+				market.data <- data.table(market.json$items)
+				market.data <- market.data[,list(Date = as.Date(date),
+												Volume= volume,
+												High  = highPrice,
+												Low   = lowPrice,
+												Close =avgPrice[-1],
+												Open  = avgPrice)]
+				n <- nrow(market.data)
+				market.data <- market.data[1:n-1,]
+				market.data.ts <- xts(market.data[,-1,with=F],order.by=market.data[,Date],period=7)
+				%s('%s',width = %s, height = %s)
+				chartSeries(market.data.ts,
+							name = '%s',
+							TA = '%s',
+							subset = '%s')
+				dev.off()''' % (query_str, img_type, img_path, img_X, img_Y, plot_title, default_TA, default_subset)
+				
+			#print R_command
+			robjects.r(R_command)
 def main():
 	report_sigmas = [
 		-2.5,
@@ -339,7 +386,21 @@ def main():
 		 2.0,
 		 2.5
 	]
+	global convert
 	
+	sde_cur.execute('''SELECT typeid,typename
+						FROM invtypes conv
+						JOIN invgroups grp ON (conv.groupID = grp.groupID)
+						WHERE marketgroupid IS NOT NULL
+						AND conv.published = 1
+						AND grp.categoryid NOT IN (9,16,350001,2)
+						AND grp.groupid NOT IN (30,659,485,485,873,883)''')
+	tmp_convlist = sde_cur.fetchall()
+	for row in tmp_convlist:
+		convert[row[0]]=row[1]
+		
+	plot_forced_group()
+	sys.exit()
 	market_sigmas = market_volume_report(report_sigmas)
 	flaged_items = sigma_report(market_sigmas, filter_sigmas, 15)
 	
