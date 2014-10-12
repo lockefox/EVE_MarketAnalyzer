@@ -109,9 +109,9 @@ region_list = {
 
 trunc_region_list = {
 	'10000002':'The Forge',
-	'10000043':'Domain',
-	'10000032':'Sinq Laison',
-	'10000042':'Metropolis',
+	#'10000043':'Domain',
+	#'10000032':'Sinq Laison',
+	#'10000042':'Metropolis',
 	}
 	
 def _validate_connection():
