@@ -8,7 +8,9 @@ import pypyodbc
 from datetime import datetime
 import numpy
 import rpy2.robjects as robjects
+import rpy2
 from rpy2.robjects.packages import importr
+
 
 conf = ConfigParser.ConfigParser()
 conf.read(['init.ini','init_local.ini'])
@@ -77,6 +79,17 @@ sigma_to_percentile = {
 	-0.1:0.460172163,
 	0   :0.5
 }
+R_configured = False
+img_type = conf.get('STATS','format')
+img_X = conf.get('STATS','plot_width')
+img_Y = conf.get('STATS','plot_height')
+
+default_TA = conf.get('STATS','default_quantmod')
+default_subset = conf.get('STATS','default_subset')
+
+crest_path = conf.get('CREST','default_path')
+today = datetime.now().strftime('%Y-%m-%d')
+retry_limit = int(conf.get('GLOBALS','default_retries'))
 
 convert = {}
 global_debug = int(conf.get('STATS','debug'))
@@ -307,30 +320,20 @@ def sigma_report(market_sigmas, filter_sigmas, days, vol_floor = 100, region=100
 	
 	return result_dict			
 
-def plot_forced_group(region=10000002):
-	print 'Setting up R libraries'
-	importr('jsonlite')
-	importr('quantmod',robject_translations = {'skeleton.TA':'skeletonTA'})
-	importr('data.table')
-	
+def fetch_and_plot(data_struct, region=10000002):
+	global R_configured
+	if not R_configured:
+		print 'Setting up R libraries'
+		importr('jsonlite')
+		importr('quantmod',robject_translations = {'skeleton.TA':'skeletonTA'})
+		importr('data.table')
+		R_configured = True
+
 	print 'setting up dump path'
-	R_config_file = open(conf.get('STATS','R_config_file'),'r')
-	R_todo = json.load(R_config_file)
-	
-	img_type = conf.get('STATS','format')
-	img_X = conf.get('STATS','plot_width')
-	img_Y = conf.get('STATS','plot_height')
-	
-	default_TA = conf.get('STATS','default_quantmod')
-	default_subset = conf.get('STATS','default_subset')
-	
-	crest_path = conf.get('CREST','default_path')
-	today = datetime.now().strftime('%Y-%m-%d')
-	
 	if not os.path.exists('plots/%s' % today):
 		os.makedirs('plots/%s' % today)
 	
-	for group, item_list in R_todo['forced_plots'].iteritems():
+	for group, item_list in data_struct.iteritems():
 		print 'crunching %s' % group
 		dump_path = 'plots/%s/%s' % (today, group)
 		if not os.path.exists(dump_path):
@@ -341,9 +344,10 @@ def plot_forced_group(region=10000002):
 			item_name = convert[itemid]
 			if itemid == 29668:
 				item_name = 'PLEX'	#Hard override, because PLEX name is dumb
+			item_name = item_name.replace('\'','')	#remove special chars
 			img_path = '%s/%s_%s.%s' % (dump_path, item_name, today,img_type)
 			plot_title = '%s %s' % (item_name, today)
-			
+			print '\tplotting %s' % item_name
 			R_command = '''
 				market.json <- fromJSON(readLines('%s'))
 				market.data <- data.table(market.json$items)
@@ -362,9 +366,19 @@ def plot_forced_group(region=10000002):
 							TA = '%s',
 							subset = '%s')
 				dev.off()''' % (query_str, img_type, img_path, img_X, img_Y, plot_title, default_TA, default_subset)
-				
+			#robjects.r(R_command)	
 			#print R_command
-			robjects.r(R_command)
+			for tries in range (0,retry_limit):
+				try:
+					robjects.r(R_command)
+				except rpy2.rinterface.RRuntimeError as e:
+					print '\t\tFailed pull %s' % e
+					continue
+				break
+			else:
+				print '\t\tskipping %s' % item_name
+				continue
+			
 
 def main():
 	report_sigmas = [
@@ -419,7 +433,14 @@ def main():
 		
 	outfile.close()
 	
-	if not global_debug: plot_forced_group()
+	print 'Plotting Flagged Group'
+	fetch_and_plot(flaged_items)
+	
+	R_config_file = open(conf.get('STATS','R_config_file'),'r')
+	R_todo = json.load(R_config_file)
+	print 'Plotting Forced Group'
+	fetch_and_plot(R_todo['forced_plots'])
+	
 	
 if __name__ == "__main__":
 	main()
