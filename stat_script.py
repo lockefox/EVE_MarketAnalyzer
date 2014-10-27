@@ -257,7 +257,7 @@ def dictify(header_list,data_list):
 	
 	return return_dict
 	
-def sigma_report(market_sigmas, filter_sigmas, days, vol_floor = 100, region=10000002,debug=global_debug):
+def volume_sigma_report(market_sigmas, filter_sigmas, days, vol_floor = 100, region=10000002,debug=global_debug):
 	print 'Fetching Short Volumes'
 	
 	if debug:
@@ -420,7 +420,7 @@ def main():
 		convert[row[0]]=row[1]
 	market_data = fetch_market_data()
 	market_sigmas = market_volume_report(market_data, report_sigmas)
-	flaged_items = sigma_report(market_sigmas, filter_sigmas, 15)
+	flaged_items_vol = volume_sigma_report(market_sigmas, filter_sigmas, 15)
 	
 	#print flaged_items
 	outfile = open('sig_flags.txt','w')
@@ -437,7 +437,7 @@ def main():
 	outfile.close()
 	
 	print 'Plotting Flagged Group'
-	fetch_and_plot(flaged_items)
+	fetch_and_plot(flaged_items_vol)
 	
 	R_config_file = open(conf.get('STATS','R_config_file'),'r')
 	R_todo = json.load(R_config_file)
