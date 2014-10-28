@@ -108,10 +108,36 @@ sde_conn  = pypyodbc.connect('DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABA
 	% (db_driver,db_host,db_port,db_user,db_pw,sde_schema))
 sde_cur = sde_conn.cursor()
 
-def fetch_market_data(days=366, region=10000002, debug=global_debug):
+def fetch_market_data_volume(days=366, region=10000002, debug=global_debug):
+	#This needs to be merged into one fetch_market_data function
 	print 'Fetching Volumes'
 	if debug:
 		data_cur.execute('''SELECT itemid,volume
+						FROM crest_markethistory
+						WHERE regionid = %s
+						AND itemid = 34
+						AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL %s DAY
+						ORDER BY price_date''' % (region,days))
+	else:
+		data_cur.execute('''SELECT itemid,volume
+						FROM crest_markethistory
+						WHERE regionid = %s
+						AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL %s DAY
+						ORDER BY price_date''' % (region,days))
+	raw_data = data_cur.fetchall()
+	data_dict = {}
+	for row in raw_data:
+		if row[0] not in data_dict:
+			data_dict[row[0]] = []
+		data_dict[row[0]].append(row[1])
+	
+	return data_dict
+	
+def fetch_market_data(days=366, region=10000002, debug=global_debug):
+	
+	print 'Fetching Market Prices'
+	if debug:
+		data_cur.execute('''SELECT *
 						FROM crest_markethistory
 						WHERE regionid = %s
 						AND itemid = 34
@@ -128,7 +154,7 @@ def fetch_market_data(days=366, region=10000002, debug=global_debug):
 			data_dict[row[0]] = []
 		data_dict[row[0]].append(row[1])
 	
-	return data_dict
+	
 	
 def market_volume_report(data_dict, report_sigmas, region=10000002,debug=global_debug):
 	print 'Crunching Stats'
@@ -418,8 +444,8 @@ def main():
 	tmp_convlist = sde_cur.fetchall()
 	for row in tmp_convlist:
 		convert[row[0]]=row[1]
-	market_data = fetch_market_data()
-	market_sigmas = market_volume_report(market_data, report_sigmas)
+	market_data_vol = fetch_market_data_volume()
+	market_sigmas = market_volume_report(market_data_vol, report_sigmas)
 	flaged_items_vol = volume_sigma_report(market_sigmas, filter_sigmas, 15)
 	
 	#print flaged_items
