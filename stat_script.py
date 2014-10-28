@@ -108,19 +108,19 @@ sde_conn  = pypyodbc.connect('DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABA
 	% (db_driver,db_host,db_port,db_user,db_pw,sde_schema))
 sde_cur = sde_conn.cursor()
 
-def market_volume_report(report_sigmas, region=10000002,debug=global_debug):
+def fetch_market_data(days=366, region=10000002, debug=global_debug):
 	print 'Fetching Volumes'
 	if debug:
 		data_cur.execute('''SELECT itemid,volume
 						FROM crest_markethistory
 						WHERE regionid = %s
 						AND itemid = 34
-						AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL 366 DAY''' %region)
+						AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL %s DAY''' % (region,days))
 	else:
 		data_cur.execute('''SELECT itemid,volume
 						FROM crest_markethistory
 						WHERE regionid = %s
-						AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL 366 DAY''' %region)
+						AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL %s DAY''' % (region,days))
 	raw_data = data_cur.fetchall()
 	data_dict = {}
 	for row in raw_data:
@@ -128,6 +128,9 @@ def market_volume_report(report_sigmas, region=10000002,debug=global_debug):
 			data_dict[row[0]] = []
 		data_dict[row[0]].append(row[1])
 	
+	return data_dict
+	
+def market_volume_report(data_dict, report_sigmas, region=10000002,debug=global_debug):
 	print 'Crunching Stats'
 	print_array = []
 	header = []
@@ -254,7 +257,7 @@ def dictify(header_list,data_list):
 	
 	return return_dict
 	
-def sigma_report(market_sigmas, filter_sigmas, days, vol_floor = 100, region=10000002,debug=global_debug):
+def volume_sigma_report(market_sigmas, filter_sigmas, days, vol_floor = 100, region=10000002,debug=global_debug):
 	print 'Fetching Short Volumes'
 	
 	if debug:
@@ -415,9 +418,9 @@ def main():
 	tmp_convlist = sde_cur.fetchall()
 	for row in tmp_convlist:
 		convert[row[0]]=row[1]
-		
-	market_sigmas = market_volume_report(report_sigmas)
-	flaged_items = sigma_report(market_sigmas, filter_sigmas, 15)
+	market_data = fetch_market_data()
+	market_sigmas = market_volume_report(market_data, report_sigmas)
+	flaged_items_vol = volume_sigma_report(market_sigmas, filter_sigmas, 15)
 	
 	#print flaged_items
 	outfile = open('sig_flags.txt','w')
@@ -434,7 +437,7 @@ def main():
 	outfile.close()
 	
 	print 'Plotting Flagged Group'
-	fetch_and_plot(flaged_items)
+	fetch_and_plot(flaged_items_vol)
 	
 	R_config_file = open(conf.get('STATS','R_config_file'),'r')
 	R_todo = json.load(R_config_file)
