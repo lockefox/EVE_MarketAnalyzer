@@ -351,5 +351,8 @@ def main():
 	print "FETCHING CREST/MARKET_HISTORY"
 	fetch_markethistory(True,True)
 	
+	data_conn.execute('''OPTIMIZE TABLE `%s`''' % crest_pricehistory)
+	data_cur.commit()
+	
 if __name__ == "__main__":
 	main()

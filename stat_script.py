@@ -192,7 +192,7 @@ def build_header (report_sigmas,standard_stats = True):
 def sig_int_to_str(sigma_value):
 	sigma_str = 'SIG_'
 	(decimal, integer) = math.modf(sigma_value)
-	if integer < 0:
+	if integer < 0 or decimal < 0:
 		sigma_str = '%sN' % sigma_str
 		
 	sigma_str = '%s%sP%s' % (sigma_str,int(abs(integer)),int(abs(decimal*10))) #Like SIG_N2P5 or SIG_2P5	
@@ -297,7 +297,7 @@ def sigma_report(market_sigmas, filter_sigmas, days, vol_floor = 100, region=100
 			continue
 		
 		filter_sigmas.sort()
-		#check negative sigmas
+		#check negative sigmas	
 		for sigma in filter_sigmas:
 			if sigma >=0:
 				break	#do negative sigmas first
@@ -317,7 +317,7 @@ def sigma_report(market_sigmas, filter_sigmas, days, vol_floor = 100, region=100
 			if avg_value > flag_limit:
 				result_dict[sig_str].append(typeid)
 				break #most extreme sigma found, stop looking
-	
+		
 	return result_dict			
 
 def fetch_and_plot(data_struct, region=10000002):
@@ -378,7 +378,6 @@ def fetch_and_plot(data_struct, region=10000002):
 			else:
 				print '\t\tskipping %s' % item_name
 				continue
-			
 
 def main():
 	report_sigmas = [
@@ -399,6 +398,7 @@ def main():
 		-2.5,
 		-2.0,
 		-1.5,
+		#-1.0,
 		 1.5,
 		 2.0,
 		 2.5
