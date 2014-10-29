@@ -349,7 +349,7 @@ def volume_sigma_report(market_sigmas, filter_sigmas, days, vol_floor = 100, reg
 		
 	return result_dict			
 
-def fetch_and_plot(data_struct, region=10000002):
+def fetch_and_plot(data_struct, TA_args = "", region=10000002):
 	global R_configured
 	if not R_configured:
 		print 'Setting up R libraries'
@@ -392,9 +392,9 @@ def fetch_and_plot(data_struct, region=10000002):
 				%s('%s',width = %s, height = %s)
 				chartSeries(market.data.ts,
 							name = '%s',
-							TA = '%s',
+							TA = '%s%s',
 							subset = '%s')
-				dev.off()''' % (query_str, img_type, img_path, img_X, img_Y, plot_title, default_TA, default_subset)
+				dev.off()''' % (query_str, img_type, img_path, img_X, img_Y, plot_title, default_TA, TA_args, default_subset)
 			#robjects.r(R_command)	
 			#print R_command
 			for tries in range (0,retry_limit):
@@ -450,7 +450,7 @@ def main():
 	
 	#print flaged_items
 	outfile = open('sig_flags.txt','w')
-	for sig_level,itemids in flaged_items.iteritems():
+	for sig_level,itemids in flaged_items_vol.iteritems():
 		outfile.write('%s FLAGS\n' % sig_level)
 		for item in itemids:
 			itemname=''
@@ -467,8 +467,8 @@ def main():
 	
 	R_config_file = open(conf.get('STATS','R_config_file'),'r')
 	R_todo = json.load(R_config_file)
+	fetch_and_plot(R_todo['forced_plots'],";addRSI();addLines(h=30, on=4);addLines(h=70, on=4)")
 	print 'Plotting Forced Group'
-	fetch_and_plot(R_todo['forced_plots'])
 	
 	
 if __name__ == "__main__":
