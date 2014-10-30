@@ -450,7 +450,7 @@ def main():
 	
 	#print flaged_items
 	outfile = open('sig_flags.txt','w')
-	for sig_level,itemids in flaged_items.iteritems():
+	for sig_level,itemids in flaged_items_vol.iteritems():
 		outfile.write('%s FLAGS\n' % sig_level)
 		for item in itemids:
 			itemname=''
