@@ -2,3 +2,5 @@
 init_local.ini
 crest_progress.json
 *.pyc
+/EveMarketAnalyzer
+/EMA.v12.suo
