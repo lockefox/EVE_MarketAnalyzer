@@ -7,6 +7,10 @@ import ConfigParser
 import pypyodbc
 from datetime import datetime
 
+import itertools
+flatten = itertools.chain.from_iterable
+
+
 conf = ConfigParser.ConfigParser()
 conf.read(['init.ini','init_local.ini'])
 ####GLOBALS####
@@ -15,7 +19,7 @@ crest_test_path = conf.get('CREST','test_path')
 user_agent = conf.get('GLOBALS','user_agent')
 retry_limit = int(conf.get('GLOBALS','default_retries'))
 sleep_timer = int(conf.get('GLOBALS','default_sleep'))
-crash_filename = conf.get('CREST','progress_file')
+crash_filename_base = conf.get('CREST','progress_file_base')
 crash_JSON = None
 
 ####DB STUFF####
@@ -27,12 +31,13 @@ db_schema = conf.get('GLOBALS','db_schema')
 db_driver = conf.get('GLOBALS','db_driver')
 sde_schema  = conf.get('GLOBALS','sde_schema')
 
-data_conn = pypyodbc.connect('DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABASE=%s' \
-	% (db_driver,db_host,db_port,db_user,db_pw,db_schema))
-data_cur = data_conn.cursor()
-sde_conn  = pypyodbc.connect('DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABASE=%s' \
-	% (db_driver,db_host,db_port,db_user,db_pw,sde_schema))
-sde_cur = sde_conn.cursor()
+def connect_local_databases(*args):
+	global db_driver, db_host, db_port, db_user, db_pw, db_schema, sde_schema
+	schemata = args if args else [db_schema, sde_schema]
+	connections = [pypyodbc.connect('DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABASE=%s' 
+										% (db_driver,db_host,db_port,db_user,db_pw,schema))
+					for schema in schemata]
+	return flatten([conn, conn.cursor()] for conn in connections)
 
 ####TABLES####
 crest_pricehistory  = conf.get('TABLES','crest_pricehistory')
@@ -112,90 +117,81 @@ trunc_region_list = {
 	#'10000043':'Domain',
 	#'10000032':'Sinq Laison',
 	#'10000042':'Metropolis',
-	}
+}
 	
-def _validate_connection():
-	global data_conn, data_cur, sde_conn, sde_cur
-	
-	sys.stdout.write('%s' % (db_schema))	#sys.stdout.write to avoid \n of print
-	_initSQL(crest_pricehistory, data_cur, data_conn)
-	
-	sys.stdout.write('%s' % (db_schema))	#sys.stdout.write to avoid \n of print
-	_initSQL(crest_industryindex, data_cur, data_conn)
-	
-	sys.stdout.write('%s' % (db_schema))	#sys.stdout.write to avoid \n of print
-	_initSQL(crest_serverprices, data_cur, data_conn)
+def _validate_connection(tables=[crest_pricehistory, crest_industryindex, crest_serverprices],
+						 schema=db_schema,
+						 debug=False):
+	db_conn, db_cur = connect_local_databases(schema)
 
-def _initSQL(table_name, db_cur, db_conn, debug=False):	
-	db_cur.execute('''SHOW TABLES LIKE \'%s\'''' % table_name)
-	table_exists = len(db_cur.fetchall())
-	if table_exists:	#if len != 0, table is already initialized
-		sys.stdout.write('.%s:\tGOOD\n'%table_name)
-		return
-	else:
-		table_init = open(path.relpath('sql/%s.sql' % table_name)).read()
-		table_init_commands = table_init.split(';')
-		try:
-			for command in table_init_commands:
-				if debug:
-					print command
-				db_cur.execute(command)
-				db_conn.commit()
-		except Exception as e:
-			sys.stdout.write('.%s:\tERROR\t%s\n' % (table_name,e[1]))
-			sys.exit(2)
-		sys.stdout.write('.%s:\tCREATED\n' % table_name)
-		return
+	def _initSQL(table_name):	
+		db_cur.execute('''SHOW TABLES LIKE \'%s\'''' % table_name)
+		table_exists = len(db_cur.fetchall())
+		if table_exists:	#if len != 0, table is already initialized
+			print '%s.%s:\tGOOD' % (schema,table_name)
+			return
+		else:
+			table_init = open(path.relpath('sql/%s.mysql' % table_name)).read()
+			table_init_commands = table_init.split(';')
+			try:
+				for command in table_init_commands:
+					if debug:
+						print command
+					db_cur.execute(command).commit()
+			except Exception as e:
+				sys.stdout.write('.%s:\tERROR\t%s\n' % (table_name,e[1]))
+				sys.exit(2)
+			sys.stdout.write('.%s:\tCREATED\n' % table_name)
+			return
 	
-def fetch_markethistory(trunc_regions=False, debug=False, testserver=False):
-	sde_cur.execute('''SELECT typeid
+	for table in tables:
+		_initSQL(table)
+	db_conn.close()
+	
+def fetch_markethistory(region_list=[], debug=False, testserver=False):
+	if not region_list:
+		raise ValueError("Argument region_list may not be empty.")
+
+	data_conn, data_cur, sde_conn, sde_cur = connect_local_databases()
+	print "FETCHING CREST/MARKET_HISTORY"
+
+	 #remove typeid NOT IN eventualy
+	items_query = '''SELECT typeid
 					FROM invtypes conv
 					JOIN invgroups grp ON (conv.groupID = grp.groupID)
 					WHERE marketgroupid IS NOT NULL
 					AND conv.published = 1
 					AND grp.categoryid NOT IN (9,16,350001,2)
-					AND grp.groupid NOT IN (30,659,485,485,873,883)''') #remove typeid NOT IN eventualy
-	item_list_tmp = sde_cur.fetchall()
-	item_list = []
-	for row in item_list_tmp:
-		item_list.append(row[0])
-	#if debug: print item_list
+					AND grp.groupid NOT IN (30,659,485,485,873,883)'''
+
+	item_list = [row[0] for row in sde_cur.execute(items_query).fetchall()]
 	
-	price_history_headers = []
-	data_cur.execute('''SHOW COLUMNS FROM `%s`''' % crest_pricehistory)
-	table_info = data_cur.fetchall()
-	#TODO: If len(table_info) == 0 exception
-	for column in table_info:
-		price_history_headers.append(column[0])
+	price_history_query = 'SHOW COLUMNS FROM `%s`' % crest_pricehistory
+	price_history_headers = [column[0] for column in data_cur.execute(price_history_query).fetchall()]
 	
-	todo_region_list = {}
-	if trunc_regions:	todo_region_list = trunc_region_list
-	else: 				todo_region_list = region_list
-	
-	for regionID,regionName in todo_region_list.iteritems():
+	for regionID,regionName in region_list.iteritems():
+		crash_JSON = recover_on_restart(regionID)
 		print regionName
 		
 		try:
-			if len(crash_JSON['market_history'][str(regionID)]) >= len(item_list):
+			if len(crash_JSON['market_history'][regionID]) >= len(item_list):
 				print '\tRegion Complete'
 		except KeyError as e:
-			None
+			pass
 		
 		for itemID in item_list:
 			query = 'market/%s/types/%s/history/' % (regionID,itemID)
 			try:
-				if str(itemID) in crash_JSON['market_history'][str(regionID)]:
+				if str(itemID) in crash_JSON['market_history'][regionID]:
 					if debug: print '%s:\tskip' % query
 					continue #already processed data
 			except KeyError as e:
-				None				
+				pass				
 			
+			price_JSON = fetchURL_CREST(query, testserver, debug=False)
 			
-			price_JSON = fetchURL_CREST(query, testserver)
-			
-			#TODO: 0-fill missing dates
 			if len(price_JSON['items']) == 0: 
-				write_progress('market_history',regionID,itemID)
+				write_progress('market_history',regionID,itemID,crash_JSON)
 				if debug: print '%s:\tEMPTY' % query
 				continue
 			if debug: print query
@@ -213,12 +209,13 @@ def fetch_markethistory(trunc_regions=False, debug=False, testserver=False):
 				data_to_write.append(line_to_write)
 			
 			writeSQL(data_cur,crest_pricehistory,price_history_headers,data_to_write)
-			write_progress('market_history',regionID,itemID)
+			write_progress('market_history',regionID,itemID,crash_JSON)
 
 def writeSQL(db_cur, table, headers_list, data_list, hard_overwrite=True, debug=False):
 	insert_statement = '''INSERT INTO %s (%s) VALUES''' % (table, ','.join(headers_list))
 	if debug:
 		print insert_statement
+
 	for entry in data_list:
 		value_string = ''
 		for value in entry:
@@ -312,47 +309,36 @@ def _date_convert(date_str):
 	new_time = datetime.strptime(date_str,'%Y-%m-%dT%H:%M:%S')
 	return new_time.strftime('%Y-%m-%d')
 
-def recover_on_restart():
-	global crash_JSON
+def recover_on_restart(region_id):
+	crash_filename = region_id + "_" + crash_filename_base
+	crash_JSON = {'filename': crash_filename}
 	try:
-		tmp_filehandle = open(crash_filename,'r')
-		crash_JSON = json.load(tmp_filehandle)
+		with open(crash_filename,'r') as f:
+			crash_JSON = json.load(f)
+		print 'Loaded progress file %s' % crash_filename
 	except Exception as e:
-		crash_JSON = {}
 		print 'No recovery file found, starting fresh'
-		try:
-			tmp_filehandle.close()
-		except Exception as e:
-			None
-		return
-	
-	print 'Loading progress file %s' % crash_filename
-	tmp_filehandle.close()
-	return
-	
-def write_progress(subtable_name, key1, key2):
-	global crash_JSON
+			
+	return crash_JSON
+
+def write_progress(subtable_name, key1, key2, crash_JSON):
 	if subtable_name not in crash_JSON:
 		crash_JSON[subtable_name]={}
-		crash_JSON[subtable_name][key1]={}
-		crash_JSON[subtable_name][key1][key2]=0
 	if key1 not in crash_JSON[subtable_name]:
 		crash_JSON[subtable_name][key1]={}
 	crash_JSON[subtable_name][key1][key2]=1
 	
-	with open(crash_filename,'w') as crash_file:
-		json.dump(crash_JSON,crash_file)
+	with open(crash_JSON['filename'],'w') as crash_file:
+		json.dump(crash_JSON, crash_file)
 	
 def main():
 	_validate_connection()
 	
-	recover_on_restart()
-	###FETCH PRICEHISTORY###
-	print "FETCHING CREST/MARKET_HISTORY"
-	fetch_markethistory(True,True)
-	
-	data_conn.execute('''OPTIMIZE TABLE `%s`''' % crest_pricehistory)
-	data_cur.commit()
+	fetch_markethistory(region_list=trunc_region_list, debug=True, testserver=False)
+
+	data_conn, data_cur = connect_local_databases(db_schema)
+	data_cur.execute('''OPTIMIZE TABLE `%s`''' % crest_pricehistory).commit()
+	data_conn.close()
 	
 if __name__ == "__main__":
 	main()
