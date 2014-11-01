@@ -204,6 +204,7 @@ def fetch_markethistory(regions={}, debug=False, testserver=False):
 		
 		if len(crash_JSON['market_history'][regionID]) >= len(item_list):
 			thread_print( '\tRegion Complete' )
+			continue
 
 		for count,itemID in enumerate(item_list):
 			last = print_progress()
@@ -350,6 +351,10 @@ def write_progress(subtable_name, key1, key2, crash_JSON):
 		json.dump(crash_JSON, crash_file)
 
 def launch_region_threads(regions={}):
+	def fetch_markethistory(**kwargs):
+		thread_print( "%s started." % threading.current_thread().name )
+		threading._sleep(20)
+		thread_print( "%s ending." % threading.current_thread().name )
 	region_threads = []
 	for region_id, region_name in regions.iteritems():
 		kwargs = {
@@ -368,12 +373,15 @@ def launch_region_threads(regions={}):
 	return region_threads		
 
 def wait_region_threads(threads=[]):
-	done = 0
-	while done < len(threads):
+	while True:
+		done = 0
 		for t in threads:
-			if t.is_alive(): t.join(10)
-			else: continue
-			if not t.is_alive(): done = done + 1
+			if t.is_alive(): t.join(1)
+			else: 
+				thread_print( t.name + " has finished." )
+				done = done + 1
+		if done == len(threads):
+			break
 
 def _optimize_database():
 	data_conn, data_cur = connect_local_databases(db_schema)
