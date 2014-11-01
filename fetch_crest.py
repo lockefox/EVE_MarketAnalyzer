@@ -37,9 +37,13 @@ sde_schema  = conf.get('GLOBALS','sde_schema')
 def connect_local_databases(*args):
 	global db_driver, db_host, db_port, db_user, db_pw, db_schema, sde_schema
 	schemata = args if args else [db_schema, sde_schema]
-	connections = [pypyodbc.connect('DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABASE=%s' 
-										% (db_driver,db_host,db_port,db_user,db_pw,schema))
-					for schema in schemata]
+	connections = [
+		pypyodbc.connect(
+			'DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABASE=%s' 
+			% (db_driver,db_host,db_port,db_user,db_pw,schema)
+			)
+		for schema in schemata
+		]
 	return flatten([conn, conn.cursor()] for conn in connections)
 
 ####TABLES####
@@ -124,11 +128,13 @@ trunc_region_list = {
 	'10000043':'Domain',
 	'10000032':'Sinq Laison',
 	'10000042':'Metropolis',
-}
+	}
 	
-def _validate_connection(tables=[crest_pricehistory, crest_industryindex, crest_serverprices],
-						 schema=db_schema,
-						 debug=False):
+def _validate_connection(
+		tables=[crest_pricehistory, crest_industryindex, crest_serverprices],
+		schema=db_schema,
+		debug=False
+		):
 	db_conn, db_cur = connect_local_databases(schema)
 
 	def _initSQL(table_name):	
@@ -142,8 +148,7 @@ def _validate_connection(tables=[crest_pricehistory, crest_industryindex, crest_
 			table_init_commands = table_init.split(';')
 			try:
 				for command in table_init_commands:
-					if debug:
-						print command
+					if debug: print command
 					db_cur.execute(command).commit()
 			except Exception as e:
 				sys.stdout.write('.%s:\tERROR\t%s\n' % (table_name,e[1]))
@@ -154,10 +159,9 @@ def _validate_connection(tables=[crest_pricehistory, crest_industryindex, crest_
 	for table in tables:
 		_initSQL(table)
 	db_conn.close()
-	
+
 def fetch_markethistory(regions={}, debug=False, testserver=False):
-	if not regions:
-		raise ValueError("Argument region_list may not be empty.")
+	if not regions:	raise ValueError("Argument region_list may not be empty.")
 
 	start = dt.now()
 	last = dt.now()
@@ -166,14 +170,16 @@ def fetch_markethistory(regions={}, debug=False, testserver=False):
 	thread_print( "FETCHING CREST/MARKET_HISTORY on thread %s" % threading.current_thread().name )
 
 	 #remove typeid NOT IN eventualy
-	items_query = '''SELECT typeid
-					FROM invtypes conv
-					JOIN invgroups grp ON (conv.groupID = grp.groupID)
-					WHERE marketgroupid IS NOT NULL
-					AND conv.published = 1
-					AND grp.categoryid NOT IN (9,16,350001,2)
-					AND grp.groupid NOT IN (30,659,485,485,873,883)
-					ORDER BY typeid'''
+	items_query = '''
+		SELECT typeid
+		FROM invtypes conv
+		JOIN invgroups grp ON (conv.groupID = grp.groupID)
+		WHERE marketgroupid IS NOT NULL
+		AND conv.published = 1
+		AND grp.categoryid NOT IN (9,16,350001,2)
+		AND grp.groupid NOT IN (30,659,485,485,873,883)
+		ORDER BY typeid
+		'''
 
 	item_list = [row[0] for row in sde_cur.execute(items_query).fetchall()]
 	
@@ -197,7 +203,7 @@ def fetch_markethistory(regions={}, debug=False, testserver=False):
 		print regionName
 		
 		if len(crash_JSON['market_history'][regionID]) >= len(item_list):
-				thread_print( '\tRegion Complete' )
+			thread_print( '\tRegion Complete' )
 
 		for count,itemID in enumerate(item_list):
 			last = print_progress()
@@ -230,25 +236,21 @@ def fetch_markethistory(regions={}, debug=False, testserver=False):
 
 def writeSQL(db_cur, table, headers_list, data_list, hard_overwrite=True, debug=False):
 	insert_statement = '''INSERT INTO %s (%s) VALUES''' % (table, ','.join(headers_list))
-	if debug:
-		thread_print( insert_statement )
+	if debug: thread_print( insert_statement )
 
 	for entry in data_list:
 		value_string = ''
 		for value in entry:
 			if isinstance(value, (int,long,float)): #if number, add value
 				value_string = '%s,%s' % ( value_string, value)
-			else:		#if string value: add 'value'
-				if value == None:
-					value_string = '%s,NULL' % ( value_string)
-				else:
-					value = value.replace('\'', '\\\'') #sanitize apostrophies
-					value_string = '%s,\'%s\'' % ( value_string, value)
+			elif value == None:
+				value_string = '%s,NULL' % ( value_string)
+			else:
+				value = value.replace('\'', '\\\'') #sanitize apostrophies
+				value_string = '%s,\'%s\'' % ( value_string, value)
 		value_string = value_string[1:]
-		if debug:
-			thread_print( value_string )
+		if debug: thread_print( value_string )
 		insert_statement = '%s (%s),' % (insert_statement, value_string)
-	
 	
 	insert_statement = insert_statement[:-1]	#pop off trailing ','
 	if hard_overwrite:
@@ -258,18 +260,16 @@ def writeSQL(db_cur, table, headers_list, data_list, hard_overwrite=True, debug=
 		
 		insert_statement = "%s %s" % (insert_statement, duplicate_str)
 		insert_statement = insert_statement[:-1]	#pop off trailing ','
-	if debug:
-		thread_print( insert_statement )
-	db_cur.execute(insert_statement)
-	db_cur.commit()
+	if debug: thread_print( insert_statement )
+	db_cur.execute(insert_statement).commit()
 	
 def fetchURL_CREST(query, testserver=False, debug=False):
 	#Returns parsed JSON of CREST query
 	real_query = ''
-	if testserver:	real_query = '%s%s' % (crest_test_path, query)
-	else: 			real_query = '%s%s' % (crest_path, query)
+	if testserver: real_query = '%s%s' % (crest_test_path, query)
+	else: real_query = '%s%s' % (crest_path, query)
 	
-	if debug: print real_query
+	if debug: thread_print( real_query )
 	
 	request = urllib2.Request(real_query)
 	request.add_header('Accept-Encoding','gzip')
@@ -293,12 +293,7 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 			thread_print( 'Socket Error:%s %s' % (e,real_query) )
 			continue
 		
-		do_gzip = False
-		try:
-			if headers['Content-Encoding'] == 'gzip':
-				do_gzip = True
-		except KeyError as e:
-			None
+		do_gzip = headers.get('Content-Encoding','') == 'gzip'
 				
 		if do_gzip:
 			try:
@@ -306,10 +301,10 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 				zipper = gzip.GzipFile(fileobj=buf)
 				return_result = json.load(zipper)
 			except ValueError as e:
-				thread_print( "Empty response: retry %s" % real_query )
+				thread_print( "Empty response: Retry %s" % real_query )
 				continue
 			except IOError as e:
-				thread_print( "gzip unreadable: Retry %s" %real_query )
+				thread_print( "gzip unreadable: Retry %s" % real_query )
 				continue
 			else:
 				break
@@ -332,8 +327,9 @@ def recover_on_restart(region_id):
 	try:
 		with open(crash_filename,'r') as f:
 			crash_JSON = json.load(f)
-		if ((not 'market_history' in crash_JSON)
-				or (not region_id in crash_JSON['market_history'])):
+		if ((not 'market_history' in crash_JSON) or 
+			(not region_id in crash_JSON['market_history'])
+			):
 			raise Exception("Corrupted recovery file.")
 		thread_print( 'Loaded progress file %s' % crash_filename )
 	except Exception as e:
@@ -356,12 +352,16 @@ def write_progress(subtable_name, key1, key2, crash_JSON):
 def launch_region_threads(regions={}):
 	region_threads = []
 	for region_id, region_name in regions.iteritems():
-		kwargs = {'regions': {region_id: region_name},
-					'debug': False,
-					'testserver': False}
-		new_thread = threading.Thread(name=region_name, 
-										kwargs=kwargs, 
-										target=fetch_markethistory)
+		kwargs = {
+			'regions': {region_id: region_name},
+			'debug': False,
+			'testserver': False
+			}
+		new_thread = threading.Thread(
+			name=region_name, 
+			kwargs=kwargs, 
+			target=fetch_markethistory
+			)
 		new_thread.daemon = True
 		region_threads.append(new_thread)
 		new_thread.start()
