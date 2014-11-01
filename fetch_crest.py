@@ -351,10 +351,6 @@ def write_progress(subtable_name, key1, key2, crash_JSON):
 		json.dump(crash_JSON, crash_file)
 
 def launch_region_threads(regions={}):
-	def fetch_markethistory(**kwargs):
-		thread_print( "%s started." % threading.current_thread().name )
-		threading._sleep(20)
-		thread_print( "%s ending." % threading.current_thread().name )
 	region_threads = []
 	for region_id, region_name in regions.iteritems():
 		kwargs = {
@@ -384,6 +380,7 @@ def wait_region_threads(threads=[]):
 			break
 
 def _optimize_database():
+	thread_print( "Optimizing database %s..." % crest_pricehistory )
 	data_conn, data_cur = connect_local_databases(db_schema)
 	data_cur.execute('''OPTIMIZE TABLE `%s`''' % crest_pricehistory).commit()
 	data_conn.close()
