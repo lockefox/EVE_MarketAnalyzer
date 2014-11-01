@@ -1,7 +1,7 @@
 #!/Python27/python.exe
 
 import sys, gzip, StringIO, sys, math, os, getopt, time, json, socket
-from os import path
+from os import path, environ
 import urllib2
 import ConfigParser
 import pypyodbc
@@ -28,7 +28,8 @@ tick_delay_dbg = td(seconds=5)
 ####DB STUFF####
 db_host   = conf.get('GLOBALS','db_host')
 db_user   = conf.get('GLOBALS','db_user')
-db_pw     = conf.get('GLOBALS','db_pw')
+db_pw     = environ.get('MYSQL_%s_PW' % db_user.upper(), '')
+db_pw     = db_pw if db_pw else conf.get('GLOBALS','db_pw')
 db_port   = int(conf.get('GLOBALS','db_port'))
 db_schema = conf.get('GLOBALS','db_schema')
 db_driver = conf.get('GLOBALS','db_driver')
