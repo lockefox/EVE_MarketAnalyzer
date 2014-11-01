@@ -5,13 +5,12 @@ from os import path, environ
 import urllib2
 import ConfigParser
 import pypyodbc
-from datetime import datetime as dt, timedelta as td
+from datetime import datetime, timedelta
+import _strptime # because threading
 import threading
 
 import itertools
 flatten = itertools.chain.from_iterable
-strptime = dt.strptime
-
 
 conf = ConfigParser.ConfigParser()
 conf.read(['init.ini','init_local.ini'])
@@ -22,8 +21,8 @@ user_agent = conf.get('GLOBALS','user_agent')
 retry_limit = int(conf.get('GLOBALS','default_retries'))
 sleep_timer = int(conf.get('GLOBALS','default_sleep'))
 crash_filename_base = conf.get('CREST','progress_file_base')
-tick_delay = td(seconds=10)
-tick_delay_dbg = td(seconds=5)
+tick_delay = timedelta(seconds=10)
+tick_delay_dbg = timedelta(seconds=5)
 
 ####DB STUFF####
 db_host   = conf.get('GLOBALS','db_host')
@@ -55,6 +54,28 @@ crest_serverprices  = conf.get('TABLES','crest_serverprices')
 def thread_print(msg):
 	sys.stdout.write("%s\n" % msg)
 	sys.stdout.flush()
+
+def print_progress(timed_msg, last, start, count, total, debug=False):
+	'''timed_msg parameter may optionally contain format specifiers referencing these variables:
+	finished: number of items finished
+	total: total number of items
+	elapsed: time elapsed
+	remaining: estimated time remaining'''
+	delay = tick_delay_dbg if debug else tick_delay
+	now = datetime.now()
+	if (now - last) > delay:
+		elapsed = (now - start).total_seconds() / 60
+		remaining = (total - count) * elapsed / count if count else float('NaN')
+		thread_print( timed_msg.format(
+			finished=count, 
+			total=total, 
+			elapsed=elapsed, 
+			remaining=remaining
+			) )
+		return now
+	else: 
+		return last 
+
 
 ####CONST STUFF####
 region_list = {
@@ -130,7 +151,10 @@ trunc_region_list = {
 	'10000032':'Sinq Laison',
 	'10000042':'Metropolis',
 	}
-	
+
+region_name_maxlen = max( len( r ) for r in region_list.values() ) + 1
+region_name_format = "{:" + str(region_name_maxlen) + "s}"
+
 def _validate_connection(
 		tables=[crest_pricehistory, crest_industryindex, crest_serverprices],
 		schema=db_schema,
@@ -164,8 +188,8 @@ def _validate_connection(
 def fetch_markethistory(regions={}, debug=False, testserver=False):
 	if not regions:	raise ValueError("Argument region_list may not be empty.")
 
-	start = dt.now()
-	last = dt.now()
+	start = datetime.now()
+	last = datetime.now()
 
 	data_conn, data_cur, sde_conn, sde_cur = connect_local_databases()
 	thread_print( "FETCHING CREST/MARKET_HISTORY on thread %s" % threading.current_thread().name )
@@ -186,29 +210,21 @@ def fetch_markethistory(regions={}, debug=False, testserver=False):
 	
 	price_history_query = 'SHOW COLUMNS FROM `%s`' % crest_pricehistory
 	price_history_headers = [column[0] for column in data_cur.execute(price_history_query).fetchall()]
-	
-	def print_progress():
-		delay = tick_delay_dbg if debug else tick_delay
-		now = dt.now()
-		if (now - last) > delay:
-			timed_msg = "{}: {}/{} ({:.1f} m elapsed / {:.1f} m remaining)"
-			elapsed = (now - start).total_seconds() / 60
-			remaining = (len(item_list) - count) * elapsed / count if count else float('NaN')
-			thread_print( timed_msg.format(regionName, count, len(item_list), elapsed, remaining) )
-			return now
-		else: 
-			return last 
+
+	def print_progress_thread():
+		timed_msg = fmt_name + " {finished}/{total} ({elapsed:.1f} m elapsed / {remaining:.1f} m remaining)"
+		return print_progress(timed_msg, last, start, count, len(item_list), debug)
 
 	for regionID, regionName in regions.iteritems():
+		fmt_name = region_name_format.format( regionName + ":" )
 		crash_JSON = recover_on_restart(regionID)
-		print regionName
 		
 		if len(crash_JSON['market_history'][regionID]) >= len(item_list):
-			thread_print( '\tRegion Complete' )
+			thread_print( fmt_name + ' Region Complete!' )
 			continue
 
 		for count,itemID in enumerate(item_list):
-			last = print_progress()
+			last = print_progress_thread()
 			query = 'market/%s/types/%s/history/' % (regionID,itemID)
 			if itemID in crash_JSON['market_history'][regionID]:
 				if debug: thread_print( '%s:\tskip' % query )
@@ -235,6 +251,8 @@ def fetch_markethistory(regions={}, debug=False, testserver=False):
 			
 			writeSQL(data_cur,crest_pricehistory,price_history_headers,data_to_write)
 			write_progress('market_history',regionID,itemID,crash_JSON)
+	
+	data_conn.close() # should use a with maybe.
 
 def writeSQL(db_cur, table, headers_list, data_list, hard_overwrite=True, debug=False):
 	insert_statement = '''INSERT INTO %s (%s) VALUES''' % (table, ','.join(headers_list))
@@ -320,10 +338,11 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 	return return_result
 	
 def _date_convert(date_str):
-	new_time = strptime(date_str,'%Y-%m-%dT%H:%M:%S')
+	new_time = datetime.strptime(date_str,'%Y-%m-%dT%H:%M:%S')
 	return new_time.strftime('%Y-%m-%d')
 
 def recover_on_restart(region_id):
+	fmt_name = region_name_format.format( threading.current_thread().name + ":" )
 	crash_filename = region_id + "_" + crash_filename_base
 	crash_JSON = {}
 	try:
@@ -333,12 +352,13 @@ def recover_on_restart(region_id):
 			(not region_id in crash_JSON['market_history'])
 			):
 			raise Exception("Corrupted recovery file.")
-		thread_print( 'Loaded progress file %s' % crash_filename )
+		msg = '%s loaded progress file %s' 
 	except Exception as e:
-		thread_print( 'No recovery file found, starting fresh' )
+		msg = '%s found no progress file; starting fresh with %s'
 		crash_JSON['market_history'] = {}
 		crash_JSON['market_history'][region_id] = {}
 	crash_JSON['filename'] = crash_filename
+	thread_print( msg % (fmt_name, crash_filename) ) 
 	return crash_JSON
 
 def write_progress(subtable_name, key1, key2, crash_JSON):
@@ -370,14 +390,23 @@ def launch_region_threads(regions={}):
 	return region_threads		
 
 def wait_region_threads(threads=[]):
+	start = datetime.now()
+	last = datetime.now()
 	while True:
-		done = 0
+		done = []
 		for t in threads:
 			if t.is_alive(): t.join(1)
-			else: 
-				thread_print( t.name + " has finished." )
-				done = done + 1
-		if done == len(threads):
+			else: done.append(t.name)
+		if done:
+			last = print_progress(
+				",".join(done) + " finished. {elapsed:.2f} m total", 
+				last, 
+				start, 
+				len(done), 
+				len(threads)
+				)
+
+		if len(done) == len(threads):
 			break
 
 def _optimize_database():
