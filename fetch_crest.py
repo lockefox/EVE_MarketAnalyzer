@@ -5,12 +5,12 @@ from os import path
 import urllib2
 import ConfigParser
 import pypyodbc
-import datetime
 from datetime import datetime as dt, timedelta as td
 import threading
 
 import itertools
 flatten = itertools.chain.from_iterable
+strptime = dt.strptime
 
 
 conf = ConfigParser.ConfigParser()
@@ -323,7 +323,7 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 	return return_result
 	
 def _date_convert(date_str):
-	new_time = dt.strptime(date_str,'%Y-%m-%dT%H:%M:%S')
+	new_time = strptime(date_str,'%Y-%m-%dT%H:%M:%S')
 	return new_time.strftime('%Y-%m-%d')
 
 def recover_on_restart(region_id):
