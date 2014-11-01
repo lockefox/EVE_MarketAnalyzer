@@ -5,7 +5,9 @@ from os import path
 import urllib2
 import ConfigParser
 import pypyodbc
-from datetime import datetime
+import datetime
+from datetime import datetime as dt, timedelta as td
+import threading
 
 import itertools
 flatten = itertools.chain.from_iterable
@@ -20,7 +22,8 @@ user_agent = conf.get('GLOBALS','user_agent')
 retry_limit = int(conf.get('GLOBALS','default_retries'))
 sleep_timer = int(conf.get('GLOBALS','default_sleep'))
 crash_filename_base = conf.get('CREST','progress_file_base')
-crash_JSON = None
+tick_delay = td(seconds=10)
+tick_delay_dbg = td(seconds=5)
 
 ####DB STUFF####
 db_host   = conf.get('GLOBALS','db_host')
@@ -43,6 +46,10 @@ def connect_local_databases(*args):
 crest_pricehistory  = conf.get('TABLES','crest_pricehistory')
 crest_industryindex = conf.get('TABLES','crest_industryindex')
 crest_serverprices  = conf.get('TABLES','crest_serverprices')
+
+def thread_print(msg):
+	sys.stdout.write("%s\n" % msg)
+	sys.stdout.flush()
 
 ####CONST STUFF####
 region_list = {
@@ -114,9 +121,9 @@ region_list = {
 
 trunc_region_list = {
 	'10000002':'The Forge',
-	#'10000043':'Domain',
-	#'10000032':'Sinq Laison',
-	#'10000042':'Metropolis',
+	'10000043':'Domain',
+	'10000032':'Sinq Laison',
+	'10000042':'Metropolis',
 }
 	
 def _validate_connection(tables=[crest_pricehistory, crest_industryindex, crest_serverprices],
@@ -148,12 +155,15 @@ def _validate_connection(tables=[crest_pricehistory, crest_industryindex, crest_
 		_initSQL(table)
 	db_conn.close()
 	
-def fetch_markethistory(region_list=[], debug=False, testserver=False):
-	if not region_list:
+def fetch_markethistory(regions={}, debug=False, testserver=False):
+	if not regions:
 		raise ValueError("Argument region_list may not be empty.")
 
+	start = dt.now()
+	last = dt.now()
+
 	data_conn, data_cur, sde_conn, sde_cur = connect_local_databases()
-	print "FETCHING CREST/MARKET_HISTORY"
+	thread_print( "FETCHING CREST/MARKET_HISTORY on thread %s" % threading.current_thread().name )
 
 	 #remove typeid NOT IN eventualy
 	items_query = '''SELECT typeid
@@ -162,39 +172,46 @@ def fetch_markethistory(region_list=[], debug=False, testserver=False):
 					WHERE marketgroupid IS NOT NULL
 					AND conv.published = 1
 					AND grp.categoryid NOT IN (9,16,350001,2)
-					AND grp.groupid NOT IN (30,659,485,485,873,883)'''
+					AND grp.groupid NOT IN (30,659,485,485,873,883)
+					ORDER BY typeid'''
 
 	item_list = [row[0] for row in sde_cur.execute(items_query).fetchall()]
 	
 	price_history_query = 'SHOW COLUMNS FROM `%s`' % crest_pricehistory
 	price_history_headers = [column[0] for column in data_cur.execute(price_history_query).fetchall()]
 	
-	for regionID,regionName in region_list.iteritems():
+	def print_progress():
+		delay = tick_delay_dbg if debug else tick_delay
+		now = dt.now()
+		if (now - last) > delay:
+			timed_msg = "{}: {}/{} ({:.1f} m elapsed / {:.1f} m remaining)"
+			elapsed = (now - start).total_seconds() / 60
+			remaining = (len(item_list) - count) * elapsed / count if count else float('NaN')
+			thread_print( timed_msg.format(regionName, count, len(item_list), elapsed, remaining) )
+			return now
+		else: 
+			return last 
+
+	for regionID, regionName in regions.iteritems():
 		crash_JSON = recover_on_restart(regionID)
 		print regionName
 		
-		try:
-			if len(crash_JSON['market_history'][regionID]) >= len(item_list):
-				print '\tRegion Complete'
-		except KeyError as e:
-			pass
-		
-		for itemID in item_list:
+		if len(crash_JSON['market_history'][regionID]) >= len(item_list):
+				thread_print( '\tRegion Complete' )
+
+		for count,itemID in enumerate(item_list):
+			last = print_progress()
 			query = 'market/%s/types/%s/history/' % (regionID,itemID)
-			try:
-				if str(itemID) in crash_JSON['market_history'][regionID]:
-					if debug: print '%s:\tskip' % query
-					continue #already processed data
-			except KeyError as e:
-				pass				
+			if itemID in crash_JSON['market_history'][regionID]:
+				if debug: thread_print( '%s:\tskip' % query )
+				continue #already processed data
 			
 			price_JSON = fetchURL_CREST(query, testserver, debug=False)
 			
 			if len(price_JSON['items']) == 0: 
 				write_progress('market_history',regionID,itemID,crash_JSON)
-				if debug: print '%s:\tEMPTY' % query
+				if debug: thread_print( '%s:\tEMPTY' % query )
 				continue
-			if debug: print query
 			data_to_write = []
 			for entry in price_JSON['items']:
 				line_to_write = []
@@ -214,7 +231,7 @@ def fetch_markethistory(region_list=[], debug=False, testserver=False):
 def writeSQL(db_cur, table, headers_list, data_list, hard_overwrite=True, debug=False):
 	insert_statement = '''INSERT INTO %s (%s) VALUES''' % (table, ','.join(headers_list))
 	if debug:
-		print insert_statement
+		thread_print( insert_statement )
 
 	for entry in data_list:
 		value_string = ''
@@ -229,7 +246,7 @@ def writeSQL(db_cur, table, headers_list, data_list, hard_overwrite=True, debug=
 					value_string = '%s,\'%s\'' % ( value_string, value)
 		value_string = value_string[1:]
 		if debug:
-			print value_string
+			thread_print( value_string )
 		insert_statement = '%s (%s),' % (insert_statement, value_string)
 	
 	
@@ -242,7 +259,7 @@ def writeSQL(db_cur, table, headers_list, data_list, hard_overwrite=True, debug=
 		insert_statement = "%s %s" % (insert_statement, duplicate_str)
 		insert_statement = insert_statement[:-1]	#pop off trailing ','
 	if debug:
-		print insert_statement
+		thread_print( insert_statement )
 	db_cur.execute(insert_statement)
 	db_cur.commit()
 	
@@ -267,13 +284,13 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 			headers = raw_response.headers
 			response = raw_response.read()
 		except urllib2.HTTPError as e:
-			print 'HTTPError:%s %s' % (e,real_query)
+			thread_print( 'HTTPError:%s %s' % (e,real_query) )
 			continue
 		except urllib2.URLError as e:
-			print 'URLError:%s %s' % (e,real_query)
+			thread_print( 'URLError:%s %s' % (e,real_query) )
 			continue
 		except socket.error as e:
-			print 'Socket Error:%s %s' % (e,real_query)
+			thread_print( 'Socket Error:%s %s' % (e,real_query) )
 			continue
 		
 		do_gzip = False
@@ -289,10 +306,10 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 				zipper = gzip.GzipFile(fileobj=buf)
 				return_result = json.load(zipper)
 			except ValueError as e:
-				print "Empty response: retry %s" % real_query
+				thread_print( "Empty response: retry %s" % real_query )
 				continue
 			except IOError as e:
-				print "gzip unreadable: Retry %s" %real_query
+				thread_print( "gzip unreadable: Retry %s" %real_query )
 				continue
 			else:
 				break
@@ -300,25 +317,30 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 			return_result = json.loads(response)
 			break
 	else:
-		print headers
+		thread_print( headers )
 		sys.exit(2)
 	
 	return return_result
 	
 def _date_convert(date_str):
-	new_time = datetime.strptime(date_str,'%Y-%m-%dT%H:%M:%S')
+	new_time = dt.strptime(date_str,'%Y-%m-%dT%H:%M:%S')
 	return new_time.strftime('%Y-%m-%d')
 
 def recover_on_restart(region_id):
 	crash_filename = region_id + "_" + crash_filename_base
-	crash_JSON = {'filename': crash_filename}
+	crash_JSON = {}
 	try:
 		with open(crash_filename,'r') as f:
 			crash_JSON = json.load(f)
-		print 'Loaded progress file %s' % crash_filename
+		if ((not 'market_history' in crash_JSON)
+				or (not region_id in crash_JSON['market_history'])):
+			raise Exception("Corrupted recovery file.")
+		thread_print( 'Loaded progress file %s' % crash_filename )
 	except Exception as e:
-		print 'No recovery file found, starting fresh'
-			
+		thread_print( 'No recovery file found, starting fresh' )
+		crash_JSON['market_history'] = {}
+		crash_JSON['market_history'][region_id] = {}
+	crash_JSON['filename'] = crash_filename
 	return crash_JSON
 
 def write_progress(subtable_name, key1, key2, crash_JSON):
@@ -330,15 +352,39 @@ def write_progress(subtable_name, key1, key2, crash_JSON):
 	
 	with open(crash_JSON['filename'],'w') as crash_file:
 		json.dump(crash_JSON, crash_file)
-	
-def main():
-	_validate_connection()
-	
-	fetch_markethistory(region_list=trunc_region_list, debug=True, testserver=False)
 
+def launch_region_threads(regions={}):
+	region_threads = []
+	for region_id, region_name in regions.iteritems():
+		kwargs = {'regions': {region_id: region_name},
+					'debug': False,
+					'testserver': False}
+		new_thread = threading.Thread(name=region_name, 
+										kwargs=kwargs, 
+										target=fetch_markethistory)
+		new_thread.daemon = True
+		region_threads.append(new_thread)
+		new_thread.start()
+	return region_threads		
+
+def wait_region_threads(threads=[]):
+	done = 0
+	while done < len(threads):
+		for t in threads:
+			if t.is_alive(): t.join(10)
+			else: continue
+			if not t.is_alive(): done = done + 1
+
+def _optimize_database():
 	data_conn, data_cur = connect_local_databases(db_schema)
 	data_cur.execute('''OPTIMIZE TABLE `%s`''' % crest_pricehistory).commit()
 	data_conn.close()
-	
+
+def main():
+	_validate_connection()
+	region_threads = launch_region_threads(trunc_region_list)
+	wait_region_threads(region_threads)
+	_optimize_database()
+
 if __name__ == "__main__":
 	main()
