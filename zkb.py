@@ -321,7 +321,7 @@ def latestKillID(kill_obj):
 			earliest_time = killTime
 			latest_ID = kill["killID"]
 			
-	return latest_ID
+	return int(latest_ID)
 	
 def earliestKillID(kill_obj):
 	latest_time = datetime.utcnow()
@@ -332,13 +332,14 @@ def earliestKillID(kill_obj):
 			latest_time = killTime
 			earliest_ID = kill["killID"]
 			
-	return earliest_ID
+	return int(earliest_ID)
 
 def fetchResults(queryObj,joined_json = []):
 	query_complete = False
 	
 	try:	#only start at latest killID if not already assigned
 		beforeKill = queryObj.queryElements["beforeKillID"]
+		#print beforeKill
 	except KeyError as E:
 		beforeKill = fetchLatestKillID(queryObj.startDate)
 		queryObj.beforeKillID(beforeKill)
@@ -380,7 +381,6 @@ def fetchResult(zkb_url):
 	request.add_header('User-Agent',User_Agent)
 	
 	#log query
-	
 	for tries in range (0,retry_limit):
 		time.sleep(sleepTime)			#default wait between queries
 		time.sleep(default_sleep*tries)	#wait in case of retry
@@ -395,12 +395,12 @@ def fetchResult(zkb_url):
 		except urllib2.HTTPError as e:
 			#log_filehandle.write("%s: %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), e))
 			print "retry %s: %s" %(zkb_url,tries+1)
-			print raw_zip.headers
+			print http_header
 			continue
 		except urllib2.URLError as er:
 			#log_filehandle.write("%s: %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), er))
 			print "URLError.  Retry %s: %s" %(zkb_url,tries+1)
-			print raw_zip.headers
+			print http_header
 			continue
 		except socket.error as err:
 			#log_filehandle.write("%s: %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), err))
@@ -413,29 +413,24 @@ def fetchResult(zkb_url):
 		else:
 			sleepTime = default_sleep
 			
-		if gzip_override == 0:	#Hard override of gzip encoding
+		do_gzip = http_header.get('Content-Encoding','') == 'gzip'
+				
+		if do_gzip:
 			try:
-				dump_IOstream = StringIO.StringIO(dump_zip_stream)
-				zipper = gzip.GzipFile(fileobj=dump_IOstream)
+				buf = StringIO.StringIO(dump_zip_stream)
+				zipper = gzip.GzipFile(fileobj=buf)
 				JSON_obj = json.load(zipper)
-			except ValueError as errr:
-				#log_filehandle.write("%s: %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), errr))
-				print "Empty response.  Retry %s: %s" %(zkb_url,tries+1)
-			except IOError as errrr:
-				print "gzip header broken.  Disabling gzip and retry"
-				gzip_override = 1
-				fetchResult(zkb_url)
+			except ValueError as e:
+				print "Empty response.  Retry %s: %s" % (zkb_url,tries+1)
+				continue
+			except IOError as e:
+				print "gzip unreadable: Retry %s: %s" % (zkb_url,tries+1) 
+				continue
 			else:
 				break
-		else:	#If gzipencoding is broken, treat return as valid JSON
-			try:
-				JSON_obj = json.loads(dump_zip_stream)
-			except ValueError:	#if stream is grossly not-JSON
-				print "Unable to read return.  enabling gzip again"
-				gzip_override = 0
-				fetchResult(zkb_url)
+		else:
+			JSON_obj = json.loads(response)
 			break
-			
 	else:
 		print http_header
 		sys.exit(2)
@@ -445,8 +440,7 @@ def fetchResult(zkb_url):
 def fetchLatestKillID (start_date):
 	singleton_query = Query(start_date,"api-only/solo/kills/limit/1/")
 	kill_obj = fetchResult(str(singleton_query))
-	
-	return kill_obj[0]["killID"]
+	return int(kill_obj[0]["killID"])
 	
 def _snooze(http_header,multiplier=1):
 	global query_limit, sleepTime
@@ -518,6 +512,7 @@ def _hourlySnooze(http_header):
 		snooze * 2
 		
 	return snooze
+
 def _dump_results(queryObj,results_json):
 	dump_obj = []
 	dump_obj.append(str(queryObj))
@@ -552,7 +547,7 @@ def main():
 	#newQuery.losses
 	
 	print newQuery2
-	
+	#print newQuery2.queryElements["beforeKillID"]
 	test_return = newQuery2.fetch()
 	print len(test_return)
 	
