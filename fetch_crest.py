@@ -357,17 +357,19 @@ def recover_on_restart(region_id):
 	try:
 		with open(crash_filename,'r') as f:
 			crash_JSON = json.load(f)
-		if ((not 'market_history' in crash_JSON) or 
-			(not region_id in crash_JSON['market_history'])
+		if (
+				(not 'market_history' in crash_JSON) or 
+				(not region_id in crash_JSON['market_history'])
 			):
 			raise Exception("Corrupted recovery file.")
-		msg = '%s loaded progress file %s' 
+		msg = '%s loaded progress file %s with %s items' 
 	except Exception as e:
-		msg = '%s found no progress file; starting fresh with %s'
+		msg = '%s found no progress file; starting fresh with %s and %s items'
 		crash_JSON['market_history'] = {}
 		crash_JSON['market_history'][region_id] = {}
 	crash_JSON['filename'] = crash_filename
-	thread_print( msg % (fmt_name, crash_filename) ) 
+	num_items = len(crash_JSON['market_history'][region_id])
+	thread_print( msg % (fmt_name, crash_filename, num_items) ) 
 	return crash_JSON
 
 def write_progress(subtable_name, key1, key2, crash_JSON):
@@ -408,7 +410,7 @@ def wait_region_threads(threads=[]):
 			else: done.append(t.name)
 		if done:
 			last = print_progress(
-				",".join(done) + " finished. {elapsed:.2f} m total", 
+				", ".join(done) + " finished. {elapsed:.2f} m total", 
 				last, 
 				start, 
 				len(done), 

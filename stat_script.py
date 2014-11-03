@@ -11,7 +11,6 @@ import rpy2.robjects as robjects
 import rpy2
 from rpy2.robjects.packages import importr
 
-
 conf = ConfigParser.ConfigParser()
 conf.read(['init.ini','init_local.ini'])
 #####
@@ -361,6 +360,9 @@ def fetch_and_plot(data_struct, TA_args = "", region=10000002):
 	print 'setting up dump path'
 	if not os.path.exists('plots/%s' % today):
 		os.makedirs('plots/%s' % today)
+
+	def interp_vars(s="", l=locals(), g=globals()):
+		return s.format(**dict(g.items()+l.items()))
 	
 	for group, item_list in data_struct.iteritems():
 		print 'crunching %s' % group
@@ -374,11 +376,11 @@ def fetch_and_plot(data_struct, TA_args = "", region=10000002):
 			if itemid == 29668:
 				item_name = 'PLEX'	#Hard override, because PLEX name is dumb
 			item_name = item_name.replace('\'','')	#remove special chars
-			img_path = '%s/%s_%s.%s' % (dump_path, item_name, today,img_type)
+			img_path = interp_vars('{dump_path}/{region}_{item_name}_{today}.{img_type}')
 			plot_title = '%s %s' % (item_name, today)
 			print '\tplotting %s' % item_name
-			R_command = '''
-				market.json <- fromJSON(readLines('%s'))
+			R_command_parametrized = '''
+				market.json <- fromJSON(readLines('{query_str}'))
 				market.data <- data.table(market.json$items)
 				market.data <- market.data[,list(Date = as.Date(date),
 												Volume= volume,
@@ -389,12 +391,13 @@ def fetch_and_plot(data_struct, TA_args = "", region=10000002):
 				n <- nrow(market.data)
 				market.data <- market.data[1:n-1,]
 				market.data.ts <- xts(market.data[,-1,with=F],order.by=market.data[,Date],period=7)
-				%s('%s',width = %s, height = %s)
+				{img_type}('{img_path}',width = {img_X}, height = {img_Y})
 				chartSeries(market.data.ts,
-							name = '%s',
-							TA = '%s%s',
-							subset = '%s')
-				dev.off()''' % (query_str, img_type, img_path, img_X, img_Y, plot_title, default_TA, TA_args, default_subset)
+							name = '{plot_title}',
+							TA = '{default_TA}{TA_args}',
+							subset = '{default_subset}')
+				dev.off()'''
+			R_command = interp_vars(R_command_parametrized)
 			#robjects.r(R_command)	
 			#print R_command
 			for tries in range (0,retry_limit):
@@ -408,7 +411,7 @@ def fetch_and_plot(data_struct, TA_args = "", region=10000002):
 				print '\t\tskipping %s' % item_name
 				continue
 
-def main():
+def main(region=10000002):
 	report_sigmas = [
 		-2.5,
 		-2.0,
@@ -444,9 +447,9 @@ def main():
 	tmp_convlist = sde_cur.fetchall()
 	for row in tmp_convlist:
 		convert[row[0]]=row[1]
-	market_data_vol = fetch_market_data_volume()
-	market_sigmas = market_volume_report(market_data_vol, report_sigmas)
-	flaged_items_vol = volume_sigma_report(market_sigmas, filter_sigmas, 15)
+	market_data_vol = fetch_market_data_volume(region=region)
+	market_sigmas = market_volume_report(market_data_vol, report_sigmas, region=region)
+	flaged_items_vol = volume_sigma_report(market_sigmas, filter_sigmas, 15, region=region)
 	
 	#print flaged_items
 	outfile = open('sig_flags.txt','w')
@@ -470,6 +473,14 @@ def main():
 	fetch_and_plot(R_todo['forced_plots'],";addRSI();addLines(h=30, on=4);addLines(h=70, on=4)")
 	print 'Plotting Forced Group'
 	
-	
+
+trunc_region_list = {
+	'10000002':'The Forge',
+	'10000043':'Domain',
+	'10000032':'Sinq Laison',
+	'10000042':'Metropolis',
+	}
+
+
 if __name__ == "__main__":
-	main()
+	main(region='10000002')

@@ -30,6 +30,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="fetch_crest.py" />
+    <Compile Include="common.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="rpy_test.py" />
     <Compile Include="stat_script.py" />
   </ItemGroup>
