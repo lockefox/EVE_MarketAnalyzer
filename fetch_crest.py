@@ -3,6 +3,7 @@
 import sys, gzip, StringIO, sys, math, os, getopt, time, json, socket
 from os import path, environ
 import urllib2
+import httplib
 import ConfigParser
 import pypyodbc
 from datetime import datetime, timedelta
@@ -50,6 +51,8 @@ def connect_local_databases(*args):
 crest_pricehistory  = conf.get('TABLES','crest_pricehistory')
 crest_industryindex = conf.get('TABLES','crest_industryindex')
 crest_serverprices  = conf.get('TABLES','crest_serverprices')
+
+thread_exit_flag = False
 
 def thread_print(msg):
 	sys.stdout.write("%s\n" % msg)
@@ -251,6 +254,9 @@ def fetch_markethistory(regions={}, debug=False, testserver=False):
 			
 			writeSQL(data_cur,crest_pricehistory,price_history_headers,data_to_write)
 			write_progress('market_history',regionID,itemID,crash_JSON)
+			if thread_exit_flag: 
+				thread_print( fmt_name + "Received exit signal." )
+				return
 	
 	data_conn.close() # should use a with maybe.
 
@@ -308,6 +314,9 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 			continue
 		except urllib2.URLError as e:
 			thread_print( 'URLError:%s %s' % (e,real_query) )
+			continue
+		except httplib.HTTPException as e:
+			thread_print( 'HTTPException:%s %s' % (e, real_query) )
 			continue
 		except socket.error as e:
 			thread_print( 'Socket Error:%s %s' % (e,real_query) )
@@ -384,7 +393,7 @@ def launch_region_threads(regions={}):
 			kwargs=kwargs, 
 			target=fetch_markethistory
 			)
-		new_thread.daemon = True
+		new_thread.daemon = False # So they can clean up properly
 		region_threads.append(new_thread)
 		new_thread.start()
 	return region_threads		
@@ -422,4 +431,8 @@ def main():
 	_optimize_database()
 
 if __name__ == "__main__":
-	main()
+	try:
+		main()
+	except KeyboardInterrupt:
+		thread_exit_flag = True
+		raise
