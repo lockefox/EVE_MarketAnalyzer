@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{4e9b6424-03a8-470d-9526-42b62376fbd6}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>fetch_crest.py</StartupFile>
+    <StartupFile>stat_script.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
@@ -30,7 +30,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="fetch_crest.py" />
-    <Compile Include="common.py">
+    <Compile Include="ema_config.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="rpy_test.py" />

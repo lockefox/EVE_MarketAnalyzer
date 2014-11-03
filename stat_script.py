@@ -11,73 +11,10 @@ import rpy2.robjects as robjects
 import rpy2
 from rpy2.robjects.packages import importr
 
-conf = ConfigParser.ConfigParser()
-conf.read(['init.ini','init_local.ini'])
-#####
-#
-#	3sig	= 0.13% (769)
-#	2.5sig	= 0.62%	(161)
-#	2sig	= 2.28%	(44)
-#	1.5sig	= 6.68% (15)
-#	1sig	= 15.87%(6)
-#	0.5sig	= 30.85%(3)
-#
-#####
+from scipy.stats import norm
 
-##TODO: dynamic limits
-sigma_to_percentile = {
-	-5  :2.86652e-7 ,
-	-4.9:4.79183e-7 ,
-	-4.8:7.93328e-7 ,
-	-4.7:1.30081e-6 ,
-	-4.6:2.11245e-6 ,
-	-4.5:3.39767e-6 ,
-	-4.4:5.41254e-6 ,
-	-4.3:8.53991e-6 ,
-	-4.2:1.33457e-5 ,
-	-4.1:2.06575e-5 ,
-	-4  :3.16712e-5 ,
-	-3.9:4.80963e-5 ,
-	-3.8:7.2348e-5,
-	-3.7:0.0001078,
-	-3.6:0.000159109,
-	-3.5:0.000232629,
-	-3.4:0.000336929,
-	-3.3:0.000483424,
-	-3.2:0.000687138,
-	-3.1:0.000967603,
-	-3  :0.001349898,
-	-2.9:0.001865813,
-	-2.8:0.00255513,
-	-2.7:0.003466974,
-	-2.6:0.004661188,
-	-2.5:0.006209665,
-	-2.4:0.008197536,
-	-2.3:0.01072411 ,
-	-2.2:0.013903448,
-	-2.1:0.017864421,
-	-2  :0.022750132,
-	-1.9:0.02871656 ,
-	-1.8:0.035930319,
-	-1.7:0.044565463,
-	-1.6:0.054799292,
-	-1.5:0.066807201,
-	-1.4:0.080756659,
-	-1.3:0.096800485,
-	-1.2:0.11506967 ,
-	-1.1:0.135666061,
-	-1  :0.158655254,
-	-0.9:0.184060125,
-	-0.8:0.211855399,
-	-0.7:0.241963652,
-	-0.6:0.274253118,
-	-0.5:0.308537539,
-	-0.4:0.344578258,
-	-0.3:0.382088578,
-	-0.2:0.420740291,
-	-0.1:0.460172163,
-	0   :0.5
-}
+from ema_config import *
+
 R_configured = False
 img_type = conf.get('STATS','format')
 img_X = conf.get('STATS','plot_width')
@@ -86,26 +23,12 @@ img_Y = conf.get('STATS','plot_height')
 default_TA = conf.get('STATS','default_quantmod')
 default_subset = conf.get('STATS','default_subset')
 
-crest_path = conf.get('CREST','default_path')
 today = datetime.now().strftime('%Y-%m-%d')
-retry_limit = int(conf.get('GLOBALS','default_retries'))
 
 convert = {}
 global_debug = int(conf.get('STATS','debug'))
-db_host   = conf.get('GLOBALS','db_host')
-db_user   = conf.get('GLOBALS','db_user')
-db_pw     = conf.get('GLOBALS','db_pw')
-db_port   = int(conf.get('GLOBALS','db_port'))
-db_schema = conf.get('GLOBALS','db_schema')
-db_driver = conf.get('GLOBALS','db_driver')
-sde_schema  = conf.get('GLOBALS','sde_schema')
 
-data_conn = pypyodbc.connect('DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABASE=%s' \
-	% (db_driver,db_host,db_port,db_user,db_pw,db_schema))
-data_cur = data_conn.cursor()
-sde_conn  = pypyodbc.connect('DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABASE=%s' \
-	% (db_driver,db_host,db_port,db_user,db_pw,sde_schema))
-sde_cur = sde_conn.cursor()
+data_conn, data_cur, sde_conn, sde_cur = connect_local_databases()
 
 def fetch_market_data_volume(days=366, region=10000002, debug=global_debug):
 	#This needs to be merged into one fetch_market_data function
@@ -189,6 +112,9 @@ def market_volume_report(data_dict, report_sigmas, region=10000002,debug=global_
 	return_obj = dictify(print_array[0],print_array[1:])
 	return return_obj
 
+def sig_int_to_str(sigma_num):
+	return "{:.1f}".format(sigma_num).replace("-","N").replace(".","P")
+
 def build_header (report_sigmas,standard_stats = True):
 	header = []
 	header.append('typeid')
@@ -203,28 +129,10 @@ def build_header (report_sigmas,standard_stats = True):
 		header.append('MAX')
 		header.append('STD')
 	for sigma_num in report_sigmas:
-		sigma_str = 'SIG_'
-		try:
-			sigma_to_percentile[sigma_num]
-		except KeyError as e:
-			try:
-				sigma_to_percentile[-sigma_num]
-			except KeyError as e:
-				print 'Sigma: %s not covered' % sigma_num
-				sys.exit(2)
 		sigma_str = sig_int_to_str(sigma_num)
 		header.append(sigma_str)
 		
 	return header
-	
-def sig_int_to_str(sigma_value):
-	sigma_str = 'SIG_'
-	(decimal, integer) = math.modf(sigma_value)
-	if integer < 0 or decimal < 0:
-		sigma_str = '%sN' % sigma_str
-		
-	sigma_str = '%s%sP%s' % (sigma_str,int(abs(integer)),int(abs(decimal*10))) #Like SIG_N2P5 or SIG_2P5	
-	return sigma_str
 	
 def crunch_item_stats(itemid, vol_list, expected_length, report_sigmas, standard_stats = True):
 	results_array = []
@@ -248,25 +156,13 @@ def crunch_item_stats(itemid, vol_list, expected_length, report_sigmas, standard
 		results_array.append(numpy.std(data_array))
 	
 	for sigma in report_sigmas:
-		pos_sigma = False
-		try:
-			sigma_to_percentile[sigma]
-		except KeyError as e:
-			pos_sigma = True # lookup only covers negative sigmas.  some weirness required for positive ones
-			try:
-				sigma_to_percentile[-sigma]
-			except KeyError as e:
-				print 'Sigma: %s not covered' % sigma
-				sys.exit(2)
+		
+		pctile = norm.cdf(-abs(sigma))
 			
-		if n_count < (1/sigma_to_percentile[-abs(sigma)]):	#Not enough samples to report sigma value
+		if n_count < (1/pctile):	#Not enough samples to report sigma value
 			results_array.append(None)
 		else:
-			percent = 0.0
-			if pos_sigma:
-				percent = 1-(sigma_to_percentile[-sigma])
-			else:
-				percent = sigma_to_percentile[sigma]
+			percent = pctile if sigma <= 0 else 1 - pctile
 			results_array.append(numpy.percentile(data_array,percent*100))
 	
 	return results_array
@@ -360,9 +256,6 @@ def fetch_and_plot(data_struct, TA_args = "", region=10000002):
 	print 'setting up dump path'
 	if not os.path.exists('plots/%s' % today):
 		os.makedirs('plots/%s' % today)
-
-	def interp_vars(s="", l=locals(), g=globals()):
-		return s.format(**dict(g.items()+l.items()))
 	
 	for group, item_list in data_struct.iteritems():
 		print 'crunching %s' % group
@@ -375,8 +268,14 @@ def fetch_and_plot(data_struct, TA_args = "", region=10000002):
 			item_name = convert[itemid]
 			if itemid == 29668:
 				item_name = 'PLEX'	#Hard override, because PLEX name is dumb
-			item_name = item_name.replace('\'','')	#remove special chars
-			img_path = interp_vars('{dump_path}/{region}_{item_name}_{today}.{img_type}')
+			item_name = sanitize(item_name)	#remove special chars
+			img_path = '{dump_path}/{item_name}_{region}_{today}.{img_type}'.format(
+				dump_path=dump_path,
+				region=region,
+				item_name=item_name,
+				today=today,
+				img_type=img_type
+				)
 			plot_title = '%s %s' % (item_name, today)
 			print '\tplotting %s' % item_name
 			R_command_parametrized = '''
@@ -397,7 +296,19 @@ def fetch_and_plot(data_struct, TA_args = "", region=10000002):
 							TA = '{default_TA}{TA_args}',
 							subset = '{default_subset}')
 				dev.off()'''
-			R_command = interp_vars(R_command_parametrized)
+			R_command = R_command_parametrized.format(
+				query_str=query_str,
+				img_type=img_type,
+				img_path=img_path,
+				img_X=img_X,
+				img_Y=img_Y,
+				plot_title=plot_title,
+				default_TA=default_TA,
+				TA_args=TA_args,
+				default_subset=default_subset
+				)
+
+
 			#robjects.r(R_command)	
 			#print R_command
 			for tries in range (0,retry_limit):
@@ -466,21 +377,15 @@ def main(region=10000002):
 	outfile.close()
 	
 	print 'Plotting Flagged Group'
-	fetch_and_plot(flaged_items_vol)
+	fetch_and_plot(flaged_items_vol,region=region)
 	
 	R_config_file = open(conf.get('STATS','R_config_file'),'r')
 	R_todo = json.load(R_config_file)
-	fetch_and_plot(R_todo['forced_plots'],";addRSI();addLines(h=30, on=4);addLines(h=70, on=4)")
+	fetch_and_plot(R_todo['forced_plots'],";addRSI();addLines(h=30, on=4);addLines(h=70, on=4)",region=region)
 	print 'Plotting Forced Group'
 	
 
-trunc_region_list = {
-	'10000002':'The Forge',
-	'10000043':'Domain',
-	'10000032':'Sinq Laison',
-	'10000042':'Metropolis',
-	}
-
-
 if __name__ == "__main__":
-	main(region='10000002')
+	for region in trunc_region_list.iterkeys():
+		print "Generating plots for {region}".format(region=region)
+		main(region=region) 
