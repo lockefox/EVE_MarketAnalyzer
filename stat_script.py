@@ -11,6 +11,9 @@ import rpy2.robjects as robjects
 import rpy2
 from rpy2.robjects.packages import importr
 
+import pandas as pd
+import pandas.io.sql as psql
+
 from scipy.stats import norm
 
 from ema_config import *
@@ -30,55 +33,38 @@ global_debug = int(conf.get('STATS','debug'))
 
 data_conn, data_cur, sde_conn, sde_cur = connect_local_databases()
 
-def fetch_market_data_volume(days=366, region=10000002, debug=global_debug):
-	#This needs to be merged into one fetch_market_data function
-	print 'Fetching Volumes'
-	if debug:
-		data_cur.execute('''SELECT itemid,volume
-						FROM crest_markethistory
-						WHERE regionid = %s
-						AND itemid = 34
-						AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL %s DAY
-						ORDER BY price_date''' % (region,days))
-	else:
-		data_cur.execute('''SELECT itemid,volume
-						FROM crest_markethistory
-						WHERE regionid = %s
-						AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL %s DAY
-						ORDER BY price_date''' % (region,days))
-	raw_data = data_cur.fetchall()
-	data_dict = {}
-	for row in raw_data:
-		if row[0] not in data_dict:
-			data_dict[row[0]] = []
-		data_dict[row[0]].append(row[1])
-	
-	return data_dict
-	
 def fetch_market_data(days=366, region=10000002, debug=global_debug):
-	
-	print 'Fetching Market Prices'
+
+	print 'Fetching market data ...'
+	raw_query = \
+		'''SELECT itemid, price_date, volume, avgprice
+		   FROM crest_markethistory
+		   WHERE regionid = %s
+		   AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL %s DAY
+		   ORDER BY itemid, price_date''' % (region, days)
 	if debug:
-		data_cur.execute('''SELECT *
-						FROM crest_markethistory
-						WHERE regionid = %s
-						AND itemid = 34
-						AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL %s DAY''' % (region,days))
-	else:
-		data_cur.execute('''SELECT itemid,volume
-						FROM crest_markethistory
-						WHERE regionid = %s
-						AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL %s DAY''' % (region,days))
-	raw_data = data_cur.fetchall()
-	data_dict = {}
-	for row in raw_data:
-		if row[0] not in data_dict:
-			data_dict[row[0]] = []
-		data_dict[row[0]].append(row[1])
+		raw_query = \
+		'''SELECT itemid, price_date, volume, avgprice
+		   FROM crest_markethistory
+		   WHERE regionid = %s
+		   AND itemid = 34
+		   AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL %s DAY
+		   ORDER BY itemid, price_date''' % (region, days)
+
+	raw_data = psql.read_sql(raw_query, data_conn, parse_dates=['price_date'])
+	expected_dates = pd.DataFrame(raw_data[raw_data.itemid == 34].price_date)
+	expected_dates.index = expected_dates.price_date
+	raw_data_filled = pd.ordered_merge(
+		raw_data[raw_data.itemid.isin(convert.index)], 
+		expected_dates,
+		on='price_date',
+		left_by='itemid'
+		)
+	raw_data_filled.fillna({'volume':0}, inplace=True)
+	return raw_data_filled.groupby('itemid')
 	
-	
-	
-def market_volume_report(data_dict, report_sigmas, region=10000002,debug=global_debug):
+def market_report(data_groups, report_sigmas, region=10000002, debug=global_debug):
+	# only does volume atm.
 	print 'Crunching Stats'
 	print_array = []
 	header = []
@@ -86,34 +72,50 @@ def market_volume_report(data_dict, report_sigmas, region=10000002,debug=global_
 	#if debug: print header
 	print_array.append(header)
 	
-	expected_length = len(data_dict[34])	#TRITANIUM expected to be complete for queried range
-	for itemID,vol_array in data_dict.iteritems():
-		data_row = []
-		try:
-			data_row.append(convert[itemID])
-		except KeyError as e:
-			print 'typeID %s not found' % itemID
-			continue
-		
-		data_row = crunch_item_stats(itemID, vol_array, expected_length, report_sigmas)
-		
-		print_array.append(data_row)
-	
-	print 'Printing Results'
-	outfile = open('market_vol.csv','w')
-	for row in print_array:
-		outstr = ''
-		for col in row:
-			outstr = '%s%s,' % (outstr,col)
-		outstr = outstr[:-1]
-		outfile.write('%s\n' % (outstr))
-	outfile.close()	
-	
-	return_obj = dictify(print_array[0],print_array[1:])
-	return return_obj
+	def p(x, s): 
+		c = x.dropna()
+		ct = c.count()
+		pctile = norm.cdf(-abs(s))
+		return numpy.percentile(c, norm.cdf(s)*100) if ct >= 1/pctile else numpy.NaN
+
+	def new_func(name, lam, l=locals()):
+		lam.func_name = name
+		l[name] = lam
+		return lam
+
+	new_func('N', lambda x: x.count())
+	new_func('MIN', lambda x: x.min())
+	new_func('P10', lambda x: numpy.percentile(x, 10))
+	new_func('MED', lambda x: numpy.median(x))
+	new_func('AVG', lambda x: x.mean())
+	new_func('P90', lambda x: numpy.percentile(x, 90))
+	new_func('MAX', lambda x: x.max())
+	new_func('STD', lambda x: x.std())
+
+	standard_stats = [N, MIN, P10, MED, AVG, P90, MAX, STD]
+	sigma_stats = [
+		new_func(sig_int_to_str(sigma), lambda x, s=sigma: p(x, s))
+		for sigma in report_sigmas
+		]
+
+	stats = data_groups.agg(standard_stats + sigma_stats)
+
+	# slice the data and rename the columns so it's close to previous data.
+	stats_vol = stats.loc[:,('volume','MIN'):('avgprice','N')]
+	stats_vol.columns = stats_vol.columns.get_level_values(1)
+	stats_final = pd.merge(convert, stats_vol, left_index=True, right_index=True)
+	stats_final.index.name = 'typeid'
+	stats_final.rename(columns={'name':'typename'}, inplace=True)
+	cols = stats_final.columns.tolist()
+	cols.insert(1,'N')
+	cols.pop()
+	stats_final = stats_final[cols]
+	stats_final.to_csv('market_vol.csv')
+
+	return stats_final
 
 def sig_int_to_str(sigma_num):
-	return "{:.1f}".format(sigma_num).replace("-","N").replace(".","P")
+	return "S{:.1f}".format(sigma_num).replace("-","N").replace(".","P")
 
 def build_header (report_sigmas,standard_stats = True):
 	header = []
@@ -134,14 +136,17 @@ def build_header (report_sigmas,standard_stats = True):
 		
 	return header
 	
-def crunch_item_stats(itemid, vol_list, expected_length, report_sigmas, standard_stats = True):
+def crunch_item_stats(item_id, data_group, expected_dates, report_sigmas, standard_stats = True):
+
 	results_array = []
 	data_array = vol_list
 	n_count = len(vol_list)
 	results_array.append(itemid)
-	results_array.append(convert[itemid])
+	results_array.append(convert.at[itemid,'name'])
 	results_array.append(n_count)
 	
+	filled_group = pd.mer
+
 	if n_count < expected_length:	#append zeros to make sigmas match sample size
 		for range in (0, expected_length - n_count):
 			data_array.append(0)
@@ -157,7 +162,7 @@ def crunch_item_stats(itemid, vol_list, expected_length, report_sigmas, standard
 	
 	for sigma in report_sigmas:
 		
-		pctile = norm.cdf(-abs(sigma))
+		pctile = norm.cdf(sigma)
 			
 		if n_count < (1/pctile):	#Not enough samples to report sigma value
 			results_array.append(None)
@@ -265,7 +270,7 @@ def fetch_and_plot(data_struct, TA_args = "", region=10000002):
 			
 		for itemid in item_list:
 			query_str = '%smarket/%s/types/%s/history/' % (crest_path, region, itemid)
-			item_name = convert[itemid]
+			item_name = convert.at[itemid,'name']
 			if itemid == 29668:
 				item_name = 'PLEX'	#Hard override, because PLEX name is dumb
 			item_name = sanitize(item_name)	#remove special chars
@@ -348,18 +353,22 @@ def main(region=10000002):
 	]
 	global convert
 	print 'Fetching item list from SDE: %s' % sde_schema
-	sde_cur.execute('''SELECT typeid,typename
-						FROM invtypes conv
-						JOIN invgroups grp ON (conv.groupID = grp.groupID)
-						WHERE marketgroupid IS NOT NULL
-						AND conv.published = 1
-						AND grp.categoryid NOT IN (9,16,350001,2)
-						AND grp.groupid NOT IN (30,659,485,485,873,883)''')
-	tmp_convlist = sde_cur.fetchall()
-	for row in tmp_convlist:
-		convert[row[0]]=row[1]
-	market_data_vol = fetch_market_data_volume(region=region)
-	market_sigmas = market_volume_report(market_data_vol, report_sigmas, region=region)
+
+	convert = psql.read_sql(
+		'''SELECT typeid as itemid, typename as name
+ 		   FROM invtypes conv
+ 		   JOIN invgroups grp ON (conv.groupID = grp.groupID)
+ 		   WHERE marketgroupid IS NOT NULL
+ 		   AND conv.published = 1
+ 		   AND grp.categoryid NOT IN (9,16,350001,2)
+		   AND grp.groupid NOT IN (30,659,485,485,873,883)
+ 		   ORDER BY itemid''', 
+		sde_conn, 
+		index_col=['itemid']
+		)
+
+	market_data_groups = fetch_market_data(region=region)
+	market_sigmas = market_report(market_data_groups, report_sigmas, region=region)
 	flaged_items_vol = volume_sigma_report(market_sigmas, filter_sigmas, 15, region=region)
 	
 	#print flaged_items
@@ -369,9 +378,9 @@ def main(region=10000002):
 		for item in itemids:
 			itemname=''
 			try:
-				itemname = convert[item]
+				itemname = convert.at[item,'name']
 			except KeyError as e:
-				None
+				pass
 			outfile.write('\t%s,%s\n' % (item,itemname))
 		
 	outfile.close()
