@@ -69,9 +69,30 @@ def _validate_connection(
 		_initSQL(table)
 	db_conn.close()	
 
+def get_crawl_list (method):
+	crawl_list = []
+	crawl_query = ''
+	if method.upper() == 'SHIP':
+		crawl_query = '''
+			SELECT typeid
+			FROM invtypes conv
+			JOIN invgroups grp ON (conv.groupID = grp.groupID)
+			WHERE categoryid = 6'''
+	elif method.upper() == 'GROUP':
+		crawl_query = '''
+			SELECT groupid
+			FROM invtypes conv
+			JOIN invgroups grp ON (conv.groupID = grp.groupID)
+			WHERE categoryid = 6'''
+	else
+		print 'Unsupported fetch method: %s' % method.upper()
+		sys.exit(2)
+		
 def main():
 	_validate_connection()
 	#TODO: test if zkb API is up
+	crawl_list = get_crawl_list('SHIP')
+	
 
 if __name__ == "__main__":
 	main()
