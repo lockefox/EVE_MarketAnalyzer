@@ -433,6 +433,9 @@ def main():
 		 2.5
 	]
 	global convert
+	R_config_file = open(conf.get('STATS','R_config_file'),'r')
+	R_todo = json.load(R_config_file)
+	
 	print 'Fetching item list from SDE: %s' % sde_schema
 	sde_cur.execute('''SELECT typeid,typename
 						FROM invtypes conv
@@ -444,6 +447,9 @@ def main():
 	tmp_convlist = sde_cur.fetchall()
 	for row in tmp_convlist:
 		convert[row[0]]=row[1]
+		
+	fetch_and_plot(R_todo['forced_plots'],";addRSI();addLines(h=30, on=4);addLines(h=70, on=4)")
+	sys.exit(0)
 	market_data_vol = fetch_market_data_volume()
 	market_sigmas = market_volume_report(market_data_vol, report_sigmas)
 	flaged_items_vol = volume_sigma_report(market_sigmas, filter_sigmas, 15)

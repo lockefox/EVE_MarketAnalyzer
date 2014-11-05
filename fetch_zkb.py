@@ -74,25 +74,33 @@ def get_crawl_list (method):
 	crawl_query = ''
 	if method.upper() == 'SHIP':
 		crawl_query = '''
-			SELECT typeid
+			SELECT conv.typeid
 			FROM invtypes conv
 			JOIN invgroups grp ON (conv.groupID = grp.groupID)
 			WHERE categoryid = 6'''
 	elif method.upper() == 'GROUP':
 		crawl_query = '''
-			SELECT groupid
+			SELECT grp.groupid
 			FROM invtypes conv
 			JOIN invgroups grp ON (conv.groupID = grp.groupID)
-			WHERE categoryid = 6'''
-	else
+			WHERE categoryid = 6
+			GROUP BY grp.groupid'''
+	else:
 		print 'Unsupported fetch method: %s' % method.upper()
 		sys.exit(2)
-		
+	
+	data_conn, data_cur, sde_conn, sde_cur = connect_local_databases() #connect to SDE
+	
+	crawl_list = [row[0] for row in sde_cur.execute(crawl_query).fetchall()] #fetch and parse SDE call
+	
+	return crawl_list
+
+	
 def main():
 	_validate_connection()
 	#TODO: test if zkb API is up
-	crawl_list = get_crawl_list('SHIP')
-	
+	crawl_list = get_crawl_list('GROUP')
+	print crawl_list
 
 if __name__ == "__main__":
 	main()
