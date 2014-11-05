@@ -23,9 +23,14 @@ db_driver = conf.get('GLOBALS','db_driver')
 sde_schema  = conf.get('GLOBALS','sde_schema')
 
 ####TABLES####
-zkb_participants = conf.get('TABLES','zkb_participants')
 zkb_fits         = conf.get('TABLES','zkb_fits')
 zkb_trunc_stats  = conf.get('TABLES','zkb_trunc_stats')
+zkb_participants = conf.get('TABLES','zkb_participants')
+
+####GLOBALS####
+progress_file = conf.get('ZKB','progress_file')
+
+progress_object = []
 
 def connect_local_databases(*args):
 	global db_driver, db_host, db_port, db_user, db_pw, db_schema, sde_schema
@@ -91,16 +96,43 @@ def get_crawl_list (method):
 	
 	data_conn, data_cur, sde_conn, sde_cur = connect_local_databases() #connect to SDE
 	
-	crawl_list = [row[0] for row in sde_cur.execute(crawl_query).fetchall()] #fetch and parse SDE call
-	
+	crawl_list = [row[0] for row in sde_cur.execute(crawl_query).fetchall()] #fetch and parse SDE call	
 	return crawl_list
 
+def backfill_loss_values():
+	None	#use the crest_markethistory to fill any missing fit values
+
+def _dump_progress(latest_query, kill_id_list):
+	global progress_object
+	
+	progress_object['queries'].append(latest_query)
+	for kill_id in kill_id_list:
+		progress_object['kill_ids'].append(kill_id)	#probably going to make list huge
+		
+	progress_object['last_query'] = latest_query
+	
+	dumpfile = open(progress_file, 'w')
+	dumpfile.write(json.dumps(progress_object))
+	dumpfile.close()
+	
+def _load_progress():
+	global progress_object		
+	try:
+		progress_file_obj = open(progress_file)
+	except Exception as e:
+		print "no progress file found"
+		#need progress_file_obj.close()?
+		return
+	progress_object = json.load(progress_file_obj)
+	progress_file_obj.close()
 	
 def main():
 	_validate_connection()
 	#TODO: test if zkb API is up
+	_load_progress()
 	crawl_list = get_crawl_list('GROUP')
-	print crawl_list
+	
+	
 
 if __name__ == "__main__":
 	main()
