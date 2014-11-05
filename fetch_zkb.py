@@ -29,8 +29,10 @@ zkb_participants = conf.get('TABLES','zkb_participants')
 
 ####GLOBALS####
 progress_file = conf.get('ZKB','progress_file')
+api_fetch_limit = conf.get('ZKB','api_fetch_limit')
+zkb_base_query = conf.get('ZKB','base_query')
 
-progress_object = []
+progress_object = {}
 
 def connect_local_databases(*args):
 	global db_driver, db_host, db_port, db_user, db_pw, db_schema, sde_schema
@@ -99,6 +101,9 @@ def get_crawl_list (method):
 	crawl_list = [row[0] for row in sde_cur.execute(crawl_query).fetchall()] #fetch and parse SDE call	
 	return crawl_list
 
+def archive_crawler(start_date, end_date):
+	None
+	
 def backfill_loss_values():
 	None	#use the crest_markethistory to fill any missing fit values
 
@@ -132,6 +137,11 @@ def main():
 	_load_progress()
 	crawl_list = get_crawl_list('GROUP')
 	
+	Query_bulk = zkb.Query(api_fetch_limit)
+	if 'last_query' in progress_object:
+		#overwrite query object with forced raw args
+		query_args = progress_object['last_query'].replace(zkb_base_query,'')
+		Query_bulk = zkb.Query(api_fetch_limit, progress_object['last_query'])
 	
 
 if __name__ == "__main__":
