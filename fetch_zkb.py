@@ -31,9 +31,63 @@ zkb_participants = conf.get('TABLES','zkb_participants')
 progress_file = conf.get('ZKB','progress_file')
 api_fetch_limit = conf.get('ZKB','api_fetch_limit')
 zkb_base_query = conf.get('ZKB','base_query')
+default_group_mode = conf.get('ZKB','group_routine')
 
 progress_object = {}
 
+class Progress(object):
+	__initialized = False
+	__fresh_run = False
+	def __init__ (self, mode = default_group_mode):
+		self.latest_query = ''
+		self.killIDs = []
+		self.groups_completed = []
+		self.groups_remaining = []
+		self.mode = mode
+		self.parse_crash_log()	#init object automatically
+		
+		if __fresh_run:
+			None #init from base if parse_crash_log returns nothing
+			
+	def dump_object(self):
+		dump_object = {}
+		
+		dump_object['killIDs'] = self.killIDs
+		dump_object['groups_completed'] = self.groups_completed
+		dump_object['groups_remaining'] = self.groups_remaining
+		dump_object['latest_query'] = self.latest_query
+		dump_object['mode'] = self.mode
+		
+		return dump_object
+		
+	def dump_crash_log (self, json_file = progress_file):
+		file = open(json_file,'w')
+		file.write(json.dumps(self.dump_object(), sort_keys=True, indent=3, separators=(',',': '))
+		file.close()
+		
+	def parse_crash_log(self, json_file = progress_file):
+		try:
+			file = open(json_file,'r')
+		except Exception as e:
+			print 'crash file not found'
+			__fresh_run = True
+			return
+		dump_object = json.load(file)
+		file.close()
+		
+		self.latest_query = dump_object['mode']
+		
+		if self.latest_query != eq default_group_mode:
+			print 'Modes don\'t match.  Starting fresh'
+			__fresh_run = True
+			return
+		
+		self.killIDs = dump_object['killIDs']
+		self.groups_completed = dump_object['groups_completed']
+		self.groups_remaining = dump_object['groups_remaining']
+		self.latest_query = dump_object['latest_query']
+		
+		
 def connect_local_databases(*args):
 	global db_driver, db_host, db_port, db_user, db_pw, db_schema, sde_schema
 	schemata = args if args else [db_schema, sde_schema]
