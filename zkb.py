@@ -77,6 +77,9 @@ class Query(object):
 		
 	def fetch(self):
 		return fetchResults(self)
+	
+	def fetch_one(self):
+		return fetchResult(str(self))
 		
 	def parseQueryArgs(self,queryArgs):	#Would prefer to also do internal validation
 		arg_list = queryArgs.split('/')

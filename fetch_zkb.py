@@ -44,12 +44,13 @@ class Progress(object):
 		self.groups_completed = []
 		self.groups_remaining = []
 		self.mode = mode
+		
 		self.parse_crash_log()	#init object automatically
 		
-		if __fresh_run:
-			None #init from base if parse_crash_log returns nothing
-			
-	def dump_object(self):
+		if self.__fresh_run:
+			self.groups_remaining = get_crawl_list(self.mode)
+					
+	def build_dump_object(self):
 		dump_object = {}
 		
 		dump_object['killIDs'] = self.killIDs
@@ -62,31 +63,44 @@ class Progress(object):
 		
 	def dump_crash_log (self, json_file = progress_file):
 		file = open(json_file,'w')
-		file.write(json.dumps(self.dump_object(), sort_keys=True, indent=3, separators=(',',': '))
+		file.write(json.dumps(self.build_dump_object(), sort_keys=True, indent=3, separators=(',',': ')))
 		file.close()
 		
 	def parse_crash_log(self, json_file = progress_file):
 		try:
 			file = open(json_file,'r')
 		except Exception as e:
-			print 'crash file not found'
-			__fresh_run = True
+			print 'Crash file not found.  Starting fresh'
+			self.__fresh_run = True
 			return
 		dump_object = json.load(file)
 		file.close()
 		
-		self.latest_query = dump_object['mode']
-		
-		if self.latest_query != eq default_group_mode:
+		if self.mode != dump_object['mode']:
 			print 'Modes don\'t match.  Starting fresh'
-			__fresh_run = True
+			self.__fresh_run = True
 			return
-		
+			
+		self.mode = dump_object['mode']
 		self.killIDs = dump_object['killIDs']
 		self.groups_completed = dump_object['groups_completed']
 		self.groups_remaining = dump_object['groups_remaining']
 		self.latest_query = dump_object['latest_query']
+
+	def addKillID(self,newkillID):
+		self.killIDs.append(int(newkillID))
+	
+	def update_query(self,query_str):
+		self.latest_query = query_str
 		
+	def group_complete(self, completed_group_id):
+		self.groups_remaining.remove(completed_group_id)
+		self.groups_completed.append(completed_group_id)
+		
+	##TODO: __iter__ to have progress walk the query and manage tracking	
+	
+	def __str__ (self):
+		return self.latest_query
 		
 def connect_local_databases(*args):
 	global db_driver, db_host, db_port, db_user, db_pw, db_schema, sde_schema
@@ -161,42 +175,27 @@ def archive_crawler(start_date, end_date):
 def backfill_loss_values():
 	None	#use the crest_markethistory to fill any missing fit values
 
-def _dump_progress(latest_query, kill_id_list):
-	global progress_object
-	
-	progress_object['queries'].append(latest_query)
-	for kill_id in kill_id_list:
-		progress_object['kill_ids'].append(kill_id)	#probably going to make list huge
-		
-	progress_object['last_query'] = latest_query
-	
-	dumpfile = open(progress_file, 'w')
-	dumpfile.write(json.dumps(progress_object))
-	dumpfile.close()
-	
-def _load_progress():
-	global progress_object		
-	try:
-		progress_file_obj = open(progress_file)
-	except Exception as e:
-		print "no progress file found"
-		#need progress_file_obj.close()?
-		return
-	progress_object = json.load(progress_file_obj)
-	progress_file_obj.close()
+
 	
 def main():
 	_validate_connection()
 	#TODO: test if zkb API is up
-	_load_progress()
-	crawl_list = get_crawl_list('GROUP')
+	newProgress = Progress()
 	
-	Query_bulk = zkb.Query(api_fetch_limit)
-	if 'last_query' in progress_object:
-		#overwrite query object with forced raw args
-		query_args = progress_object['last_query'].replace(zkb_base_query,'')
-		Query_bulk = zkb.Query(api_fetch_limit, progress_object['last_query'])
+	##debug Progress by forcing data##
+	print newProgress.groups_remaining
 	
+	newQuery = zkb.Query(api_fetch_limit,'api-only/corporationID/1894214152/limit/10/')
+	newProgress.update_query(str(newQuery))
+	json_obj = newQuery.fetch_one()
+	
+	for kill in json_obj:
+		newProgress.addKillID(kill['killID'])
+		
+	print newProgress.killIDs
+	
+	newProgress.dump_crash_log()
+
 
 if __name__ == "__main__":
 	main()
