@@ -94,6 +94,7 @@ class Progress(object):
 		self.latest_query = query_str
 		
 	def group_complete(self, completed_group_id):
+		print 'group completed: %s' % completed_group_id
 		self.groups_remaining.remove(completed_group_id)
 		self.groups_completed.append(completed_group_id)
 		
@@ -175,9 +176,76 @@ def archive_crawler(start_date, end_date):
 def backfill_loss_values():
 	None	#use the crest_markethistory to fill any missing fit values
 
-def write_kills_to_SQL(zkb_return):
-	None
+def build_commit_str_participants(kill_entry, base_kill_dict, isVictim = False):
 	
+	killID        = base_kill_dict['killID']
+	solarSystemID = base_kill_dict['solarSystemID']
+	kill_time     = base_kill_dict['kill_time']
+	
+	isVictim_val = 0
+	if isVictim:
+		isVictim_val = 1
+		
+	shipTtpeID    = int(kill_entry['shipTypeID'])
+	damage        = 0
+	if isVictim:
+		damage = int(kill_entry['damageTaken'])
+	else:
+		damage = int(kill_entry['damageDone'])
+	characterID   = int(kill_entry['characterID'])
+	corporationID = int(kill_entry['corporationID'])
+	allianceID    = int(kill_entry['allianceID'])
+	if allianceID == 0:
+		allianceID = 'NULL'
+	factionID     = int(kill_entry['factionID'])
+	if factionID == 0:
+		factionID = 'NULL'
+	finalBlow = 'NULL'
+	if not isVictim:
+		finalBlow = int(kill_entry['finalBlow']
+	weaponTypeID = 'NULL'
+	if not isVictim:
+		weaponTypeID = int(kill_entry['weaponTypeID'])
+	
+	totalValue = base_kill_dict['totalValue']
+	
+	#probably better way to build this#
+	return_str = '''(%s,%s,'%s',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''' %\
+		(killID,\
+		solarSystemID,\
+		kill_time,\
+		isVictim_val,\
+		damage,\
+		characterID,\
+		allianceID,\
+		factionID,\
+		finalBlow,\
+		weaponTypeID,\
+		totalValue)
+	
+	return return_str
+		
+def write_kills_to_SQL(zkb_return):
+	fits_list = []	#list of commit strs?
+	participants_list = []
+	
+	for kill in zkb_return:
+		base_kill_dict = {}
+		
+		base_kill_dict['kill_id ']      = int(kill['killID'])
+		base_kill_dict['solarSystemId'] = int(kill['solarSystemID'])
+		base_kill_dict['kill_time']     = kill['killTime']	#convert to datetime for writing to db?
+		base_kill_dict['totalValue']    = int(kill['zkb']['totalValue']) #MAY NEED EXCEPTION
+		
+		##PARSE VICTIM##
+		tmp_commit_str = build_commit_str_participants(kill, base_kill_dict, True)
+		participants_list.append(tmp_commit_str)
+		
+		for participant in attackers:
+			tmp_commit_str = build_commit_str_participants(participant, base_kill_dict, False)
+			participants_list.append(tmp_commit_str)
+		
+		
 def main():
 	_validate_connection()
 	#TODO: test if zkb API is up
