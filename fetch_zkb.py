@@ -175,27 +175,31 @@ def archive_crawler(start_date, end_date):
 def backfill_loss_values():
 	None	#use the crest_markethistory to fill any missing fit values
 
-
+def write_kills_to_SQL(zkb_return):
+	None
 	
 def main():
 	_validate_connection()
 	#TODO: test if zkb API is up
-	newProgress = Progress()
+	ProgressObj = Progress()
 	
-	##debug Progress by forcing data##
-	print newProgress.groups_remaining
 	
-	newQuery = zkb.Query(api_fetch_limit,'api-only/corporationID/1894214152/limit/10/')
-	newProgress.update_query(str(newQuery))
-	json_obj = newQuery.fetch_one()
-	
-	for kill in json_obj:
-		newProgress.addKillID(kill['killID'])
+	####FETCH LIVE KILL DATA####
+	for group in ProgressObj.groups_remaining:
+		QueryObj = zkb.Query(api_fetch_limit)
 		
-	print newProgress.killIDs
-	
-	newProgress.dump_crash_log()
-
-
+		##TODO: add multi-group scraping.  Joined group_list should work in setup below
+		if   ProgressObj.mode = 'SHIP': QueryObj.shipID(group)
+		elif ProgressObj.mode = 'GROUP': QueryObj.groupID(group)
+		else: 
+			print 'Unsupported fetch method: %s' % method.upper()
+			sys.exit(2)
+		
+		for kill_list in QueryObj:
+			write_kills_to_SQL(kill_list)
+			#TODO: write killid list to ProgressObj
+			
+		ProgressObj.group_complete(group)	#TODO: will need to parse out CSV to list?
+		
 if __name__ == "__main__":
 	main()
