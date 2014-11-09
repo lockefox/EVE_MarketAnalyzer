@@ -18,6 +18,17 @@ from scipy.stats import norm
 
 from ema_config import *
 
+global V
+
+class AttrLogger(object):
+	def __init__(self):
+		super(AttrLogger, self).__setattr__('start_time', time.clock())
+	def __setattr__(self, name, value):
+		print "{0:6.1f} Finished calculating {1}.".format(time.clock()-self.start_time, name)
+		super(AttrLogger, self).__setattr__(name, value)
+
+V = AttrLogger()
+
 R_configured = False
 img_type = conf.get('STATS','format')
 img_X = conf.get('STATS','plot_width')
@@ -33,8 +44,8 @@ global_debug = int(conf.get('STATS','debug'))
 
 data_conn, data_cur, sde_conn, sde_cur = connect_local_databases()
 
-def fetch_market_data(days=366, region=10000002, debug=global_debug):
-
+def fetch_market_data(days=400, window=10, region=10000002, debug=global_debug):
+	global V
 	print 'Fetching market data ...'
 	raw_query = \
 		'''SELECT itemid, price_date, volume, avgprice
@@ -51,9 +62,12 @@ def fetch_market_data(days=366, region=10000002, debug=global_debug):
 		   AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL %s DAY
 		   ORDER BY itemid, price_date''' % (region, days)
 
+	V.raw_query = raw_query
 	raw_data = psql.read_sql(raw_query, data_conn, parse_dates=['price_date'])
+	V.raw_data = raw_data
 	expected_dates = pd.DataFrame(raw_data[raw_data.itemid == 34].price_date)
 	expected_dates.index = expected_dates.price_date
+	V.expected_dates = expected_dates
 	raw_data_filled = pd.ordered_merge(
 		raw_data[raw_data.itemid.isin(convert.index)], 
 		expected_dates,
@@ -61,9 +75,34 @@ def fetch_market_data(days=366, region=10000002, debug=global_debug):
 		left_by='itemid'
 		)
 	raw_data_filled.fillna({'volume':0}, inplace=True)
+	raw_data_filled['price_delta_sma'] = \
+		raw_data_filled \
+		.groupby('itemid') \
+		.avgprice \
+		.apply(
+			lambda x: x - pd.rolling_mean(
+				x.interpolate()
+				 .fillna(method='bfill'),
+				window
+				)
+			)
+	raw_data_filled['price_delta_smm'] = \
+		raw_data_filled \
+		.groupby('itemid') \
+		.avgprice \
+		.apply(
+			lambda x: x - pd.rolling_median(
+				x.interpolate()
+				 .fillna(method='bfill'),
+				window
+				)
+			)
+
+	V.raw_data_filled = raw_data_filled
 	return raw_data_filled.groupby('itemid')
 	
 def market_report(data_groups, report_sigmas, region=10000002, debug=global_debug):
+	global V
 	# only does volume atm.
 	print 'Crunching Stats'
 	print_array = []
@@ -83,23 +122,22 @@ def market_report(data_groups, report_sigmas, region=10000002, debug=global_debu
 		l[name] = lam
 		return lam
 
-	new_func('N', lambda x: x.count())
-	new_func('MIN', lambda x: x.min())
-	new_func('P10', lambda x: numpy.percentile(x, 10))
-	new_func('MED', lambda x: numpy.median(x))
-	new_func('AVG', lambda x: x.mean())
-	new_func('P90', lambda x: numpy.percentile(x, 90))
-	new_func('MAX', lambda x: x.max())
-	new_func('STD', lambda x: x.std())
+	N = new_func('N', lambda x: x.count())
+	MIN = new_func('MIN', lambda x: x.min())
+	P10 = new_func('P10', lambda x: numpy.percentile(x, 10))
+	MED = new_func('MED', lambda x: numpy.median(x))
+	AVG = new_func('AVG', lambda x: x.mean())
+	P90 = new_func('P90', lambda x: numpy.percentile(x, 90))
+	MAX = new_func('MAX', lambda x: x.max())
+	STD = new_func('STD', lambda x: x.std())
 
 	standard_stats = [N, MIN, P10, MED, AVG, P90, MAX, STD]
 	sigma_stats = [
 		new_func(sig_int_to_str(sigma), lambda x, s=sigma: p(x, s))
 		for sigma in report_sigmas
 		]
-
 	stats = data_groups.agg(standard_stats + sigma_stats)
-
+	V.stats = stats
 	# slice the data and rename the columns so it's close to previous data.
 	stats_vol = stats.loc[:,('volume','MIN'):('avgprice','N')]
 	stats_vol.columns = stats_vol.columns.get_level_values(1)
@@ -111,7 +149,6 @@ def market_report(data_groups, report_sigmas, region=10000002, debug=global_debu
 	cols.pop()
 	stats_final = stats_final[cols]
 	stats_final.to_csv('market_vol.csv')
-
 	return stats_final
 
 def sig_int_to_str(sigma_num):
@@ -183,40 +220,35 @@ def dictify(header_list,data_list):
 	
 	return return_dict
 	
-def volume_sigma_report(market_sigmas, filter_sigmas, days, vol_floor = 100, region=10000002,debug=global_debug):
-	print 'Fetching Short Volumes'
-	
-	if debug:
-		data_cur.execute('''SELECT itemid,volume
-						FROM crest_markethistory
-						WHERE regionid = %s
-						AND itemid = 34
-						AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL %s DAY''' %(region,days))
-	else:
-		data_cur.execute('''SELECT itemid,volume
-						FROM crest_markethistory
-						WHERE regionid = %s
-						AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL %s DAY''' %(region,days))
-	raw_data = data_cur.fetchall()
-	data_dict = {}
-	for row in raw_data:
-		if row[0] not in data_dict:
-			data_dict[row[0]] = []
-		data_dict[row[0]].append(row[1])
-	
+def volume_sigma_report(
+		market_sigmas, 
+		data_groups, 
+		filter_sigmas, 
+		days, 
+		vol_floor = 100, 
+		region=10000002,
+		debug=global_debug
+		):
+	global V
+	# Drop all but last `days` data from all groups
+	vol_means = data_groups.tail(10).groupby('itemid').mean()
+	V.vol_means = vol_means
+	return
+	of_interest = pd.merge(vol_means, market_sigmas, left_on='itemid', right_on='itemid')
+	V.of_interest = of_interest
+	return
 	#Build pseudo-header for report.  Top level keys for return dict
 	result_dict = {}
 	filter_sigmas.sort()
 	if (0 in filter_sigmas) or (0.0 in filter_sigmas):
-			print '0 Sigma (MED) not supported'
-			#Not sure if > or < than MED for flagging.  Do MED flagging in another function
+		print '0 Sigma (MED) not supported'
+		#Not sure if > or < than MED for flagging.  Do MED flagging in another function
 	for sigma in filter_sigmas:
 		sig_str = sig_int_to_str(sigma)
 		result_dict[sig_str] = []
 
 	print 'Parsing data'
-	for typeid,vol_list in data_dict.iteritems():
-		flag_HIsigma = False	
+	for item in of_interest:
 		avg_value = numpy.average(vol_list)
 		if avg_value < vol_floor:
 			continue	#filter out very low volumes
@@ -366,11 +398,19 @@ def main(region=10000002):
 		sde_conn, 
 		index_col=['itemid']
 		)
-
+	V.convert = convert
 	market_data_groups = fetch_market_data(region=region)
+	V.market_data_groups = market_data_groups
 	market_sigmas = market_report(market_data_groups, report_sigmas, region=region)
-	flaged_items_vol = volume_sigma_report(market_sigmas, filter_sigmas, 15, region=region)
-	
+	V.market_sigmas = market_sigmas
+	flaged_items_vol = volume_sigma_report(
+		market_sigmas, 
+		market_data_groups, 
+		filter_sigmas, 
+		15, 
+		region=region
+		)
+	return ####
 	#print flaged_items
 	outfile = open('sig_flags.txt','w')
 	for sig_level,itemids in flaged_items_vol.iteritems():
@@ -394,7 +434,19 @@ def main(region=10000002):
 	print 'Plotting Forced Group'
 	
 
+def cuts_from_stats(stats, itemid, category):
+	s = stats.loc[itemid, category]
+	r = s['SN2P5':'S2P5']
+
+
 if __name__ == "__main__":
-	for region in trunc_region_list.iterkeys():
-		print "Generating plots for {region}".format(region=region)
-		main(region=region) 
+	main()
+else:
+	main()
+	
+	#for region in trunc_region_list.iterkeys():
+	#	print "Generating plots for {region}".format(region=region)
+	#	main(region=region) 
+
+# 30633 = wrecked weapon subroutines
+# 12801 = Javelin M

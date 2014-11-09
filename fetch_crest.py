@@ -107,16 +107,18 @@ def fetch_markethistory(regions={}, debug=False, testserver=False):
 			continue
 
 		for count,itemID in enumerate(item_list):
+			if thread_exit_flag: 
+				thread_print( fmt_name + "Received exit signal." )
+				return
 			last = print_progress_thread()
 			query = 'market/%s/types/%s/history/' % (regionID,itemID)
-			if itemID in crash_JSON['market_history'][regionID]:
-				if debug: thread_print( '%s:\tskip' % query )
+			if str(itemID) in crash_JSON['market_history'][regionID]:
+				thread_print( '%s:\tskip' % query )
 				continue #already processed data
 			
 			price_JSON = fetchURL_CREST(query, testserver, debug=False)
 			
 			if len(price_JSON['items']) == 0: 
-				write_progress('market_history',regionID,itemID,crash_JSON)
 				if debug: thread_print( '%s:\tEMPTY' % query )
 				continue
 			data_to_write = []
@@ -134,9 +136,6 @@ def fetch_markethistory(regions={}, debug=False, testserver=False):
 			
 			writeSQL(data_cur,crest_pricehistory,price_history_headers,data_to_write)
 			write_progress('market_history',regionID,itemID,crash_JSON)
-			if thread_exit_flag: 
-				thread_print( fmt_name + "Received exit signal." )
-				return
 	
 	data_conn.close() # should use a with maybe.
 
@@ -222,7 +221,7 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 			break
 	else:
 		thread_print( headers )
-		sys.exit(2)
+		return {'items':[]}
 	
 	return return_result
 	
