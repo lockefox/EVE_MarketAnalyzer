@@ -395,6 +395,9 @@ def main(region=10000002):
 		 2.5
 	]
 	global convert
+	R_config_file = open(conf.get('STATS','R_config_file'),'r')
+	R_todo = json.load(R_config_file)
+	
 	print 'Fetching item list from SDE: %s' % sde_schema
 
 	convert = psql.read_sql(
@@ -439,11 +442,11 @@ def main(region=10000002):
 	print 'Plotting Flagged Group'
 	fetch_and_plot(flaged_items_vol,region=region)
 	
+	print 'Plotting Forced Group'
 	R_config_file = open(conf.get('STATS','R_config_file'),'r')
 	R_todo = json.load(R_config_file)
 	fetch_and_plot(R_todo['forced_plots'],";addRSI();addLines(h=30, on=4);addLines(h=70, on=4)",region=region)
 	print 'Plotting Forced Group'
-	
 
 def cuts_from_stats(stats, itemid, category):
 	s = stats.loc[itemid, category]
