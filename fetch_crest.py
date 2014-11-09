@@ -181,6 +181,7 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 	request.add_header('User-Agent',user_agent)
 	
 	headers = {}
+	fatal_error = True
 	for tries in range (0,retry_limit):
 		time.sleep(sleep_timer*tries)
 		try:
@@ -190,15 +191,19 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 			response = raw_response.read()
 		except urllib2.HTTPError as e:
 			thread_print( 'HTTPError:%s %s' % (e,real_query) )
+			fatal_error = False
 			continue
 		except urllib2.URLError as e:
 			thread_print( 'URLError:%s %s' % (e,real_query) )
+			fatal_error = True
 			continue
 		except httplib.HTTPException as e:
 			thread_print( 'HTTPException:%s %s' % (e, real_query) )
+			fatal_error = True
 			continue
 		except socket.error as e:
 			thread_print( 'Socket Error:%s %s' % (e,real_query) )
+			fatal_error = True
 			continue
 		
 		do_gzip = headers.get('Content-Encoding','') == 'gzip'
@@ -210,9 +215,11 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 				return_result = json.load(zipper)
 			except ValueError as e:
 				thread_print( "Empty response: Retry %s" % real_query )
+				fatal_error = True
 				continue
 			except IOError as e:
 				thread_print( "gzip unreadable: Retry %s" % real_query )
+				fatal_error = True
 				continue
 			else:
 				break
@@ -221,6 +228,7 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 			break
 	else:
 		thread_print( headers )
+		if fatal_error: sys.exit(2)
 		return {'items':[]}
 	
 	return return_result

@@ -40,12 +40,13 @@ default_subset = conf.get('STATS','default_subset')
 today = datetime.now().strftime('%Y-%m-%d')
 
 convert = {}
+desired_stats = ['volume','price_delta_sma','price_delta_sma']
 global_debug = int(conf.get('STATS','debug'))
 
 data_conn, data_cur, sde_conn, sde_cur = connect_local_databases()
 
-def fetch_market_data(days=400, window=10, region=10000002, debug=global_debug):
-	global V
+def fetch_market_data(days=400, window=15, region=10000002, debug=global_debug):
+	global V, desired_stats
 	print 'Fetching market data ...'
 	raw_query = \
 		'''SELECT itemid, price_date, volume, avgprice
@@ -74,7 +75,11 @@ def fetch_market_data(days=400, window=10, region=10000002, debug=global_debug):
 		on='price_date',
 		left_by='itemid'
 		)
+
+	raw_data_filled['present'] = raw_data_filled.avgprice / raw_data_filled.avgprice
+
 	raw_data_filled.fillna({'volume':0}, inplace=True)
+
 	raw_data_filled['price_delta_sma'] = \
 		raw_data_filled \
 		.groupby('itemid') \
@@ -86,6 +91,9 @@ def fetch_market_data(days=400, window=10, region=10000002, debug=global_debug):
 				window
 				)
 			)
+
+	# raw_data_filled['price_delta_sma2'] = raw_data_filled['price_delta_sma'] ** 2
+
 	raw_data_filled['price_delta_smm'] = \
 		raw_data_filled \
 		.groupby('itemid') \
@@ -98,11 +106,18 @@ def fetch_market_data(days=400, window=10, region=10000002, debug=global_debug):
 				)
 			)
 
+	# raw_data_filled['price_delta_smm2'] = raw_data_filled['price_delta_smm'] ** 2
+
+	desired_stats = ['volume','price_delta_sma','price_delta_smm']
+
 	V.raw_data_filled = raw_data_filled
 	return raw_data_filled.groupby('itemid')
 	
-def market_report(data_groups, report_sigmas, region=10000002, debug=global_debug):
-	global V
+def market_report(data_groups, report_sigmas, filter_sigmas, region=10000002, debug=global_debug):
+	global V, desired_stats
+
+	desired = desired_stats
+
 	# only does volume atm.
 	print 'Crunching Stats'
 	print_array = []
@@ -122,7 +137,6 @@ def market_report(data_groups, report_sigmas, region=10000002, debug=global_debu
 		l[name] = lam
 		return lam
 
-	N = new_func('N', lambda x: x.count())
 	MIN = new_func('MIN', lambda x: x.min())
 	P10 = new_func('P10', lambda x: numpy.percentile(x, 10))
 	MED = new_func('MED', lambda x: numpy.median(x))
@@ -131,25 +145,22 @@ def market_report(data_groups, report_sigmas, region=10000002, debug=global_debu
 	MAX = new_func('MAX', lambda x: x.max())
 	STD = new_func('STD', lambda x: x.std())
 
-	standard_stats = [N, MIN, P10, MED, AVG, P90, MAX, STD]
-	sigma_stats = [
-		new_func(sig_int_to_str(sigma), lambda x, s=sigma: p(x, s))
-		for sigma in report_sigmas
-		]
-	stats = data_groups.agg(standard_stats + sigma_stats)
+	standard_stats = [MIN, MED, AVG, MAX]
+	sigma_stats = filter_sigmas
+
+	if debug:
+		standard_stats = [MIN, P10, MED, AVG, P90, MAX, STD]
+		sigma_stats = report_sigmas
+
+	stats = data_groups[desired].agg(standard_stats)
+	qs = data_groups[desired].quantile([norm.cdf(sig) for sig in sigma_stats])
+	qs.index.names = ['itemid','sigma']
+	qs.index.set_levels(sigma_stats, level=1, inplace=True)
+	stats = pd.merge(stats, qs.unstack(), left_index=True, right_index=True, copy=False)
+	stats[('all','count')] = data_groups['present'].count()
+
 	V.stats = stats
-	# slice the data and rename the columns so it's close to previous data.
-	stats_vol = stats.loc[:,('volume','MIN'):('avgprice','N')]
-	stats_vol.columns = stats_vol.columns.get_level_values(1)
-	stats_final = pd.merge(convert, stats_vol, left_index=True, right_index=True)
-	stats_final.index.name = 'typeid'
-	stats_final.rename(columns={'name':'typename'}, inplace=True)
-	cols = stats_final.columns.tolist()
-	cols.insert(1,'N')
-	cols.pop()
-	stats_final = stats_final[cols]
-	stats_final.to_csv('market_vol.csv')
-	return stats_final
+	return stats
 
 def sig_int_to_str(sigma_num):
 	return "S{:.1f}".format(sigma_num).replace("-","N").replace(".","P")
@@ -401,7 +412,7 @@ def main(region=10000002):
 	V.convert = convert
 	market_data_groups = fetch_market_data(region=region)
 	V.market_data_groups = market_data_groups
-	market_sigmas = market_report(market_data_groups, report_sigmas, region=region)
+	market_sigmas = market_report(market_data_groups, report_sigmas, filter_sigmas, region=region)
 	V.market_sigmas = market_sigmas
 	flaged_items_vol = volume_sigma_report(
 		market_sigmas, 
@@ -436,8 +447,45 @@ def main(region=10000002):
 
 def cuts_from_stats(stats, itemid, category):
 	s = stats.loc[itemid, category]
-	r = s['SN2P5':'S2P5']
+	r = s.iloc[4:10]
+	labels = r.index.tolist()
+	labels.insert(3,0.0)
+	values = r.values.tolist()
+	values.insert(0,float('-inf'))
+	values.append(float('inf'))
+	return {'bins':values, 'labels':labels}
 
+def plot_flag(itemid, data_groups, stats, desired, style=('go','ro'), range=slice(None,None)):
+	cuts = cuts_from_stats(stats, itemid, desired)
+	g = data_groups.get_group(itemid)
+	g.index = g.price_date
+	fname = desired + "_flag"
+	g[fname] = pd.cut(g[desired], **cuts)
+	ax = g.avgprice[range].plot()
+	ax = g[g[fname]<0.0].avgprice[range].plot(style=style[0])
+	ax = g[g[fname]>0.0].avgprice[range].plot(style=style[1])
+	return ax
+
+def plot_flags(
+		itemid, 
+		data_groups, 
+		stats, 
+		desired=['price_delta_sma', 'price_delta_smm', 'volume'], 
+		range=slice(None,None),
+		style=[('go','yo'),('ro','bo'),('mo','co')]
+		):
+	return [
+		plot_flag(itemid, data_groups, stats, d, style=s, range=range) 
+			for (d, s) in zip(desired, style)
+		]
+
+def hist_compare(itemid, desired=['price_delta_smm','price_delta_sma']): 
+	return (
+		V.market_data_groups
+		 .get_group(itemid)
+		 .loc[:,desired]
+		 .plot(kind='hist',alpha=0.5,bins=50)
+	)
 
 if __name__ == "__main__":
 	main()
