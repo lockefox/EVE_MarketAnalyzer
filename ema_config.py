@@ -79,7 +79,7 @@ region_list = {
 	'10000029':'Geminate',
 	'10000030':'Heimatar',
 	'10000031':'Impass',
-	'10000032':'Sinq Laison',
+	'10000032':'Sinq Liaison',
 	'10000033':'The Citadel',
 	'10000034':'The Kalevala Expanse',
 	'10000035':'Deklein',

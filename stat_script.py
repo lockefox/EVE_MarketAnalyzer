@@ -45,7 +45,7 @@ global_debug = int(conf.get('STATS','debug'))
 
 data_conn, data_cur, sde_conn, sde_cur = connect_local_databases()
 
-def fetch_market_data(days=400, window=15, region=10000002, debug=global_debug):
+def fetch_market_data(days=366, window=15, region=10000002, debug=global_debug):
 	global V, desired_stats
 	print 'Fetching market data ...'
 	raw_query = \
@@ -53,7 +53,7 @@ def fetch_market_data(days=400, window=15, region=10000002, debug=global_debug):
 		   FROM crest_markethistory
 		   WHERE regionid = %s
 		   AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL %s DAY
-		   ORDER BY itemid, price_date''' % (region, days)
+		   ORDER BY itemid, price_date''' % (region, days+30)
 	if debug:
 		raw_query = \
 		'''SELECT itemid, price_date, volume, avgprice
@@ -61,7 +61,7 @@ def fetch_market_data(days=400, window=15, region=10000002, debug=global_debug):
 		   WHERE regionid = %s
 		   AND itemid = 34
 		   AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL %s DAY
-		   ORDER BY itemid, price_date''' % (region, days)
+		   ORDER BY itemid, price_date''' % (region, days+30)
 
 	V.raw_query = raw_query
 	raw_data = psql.read_sql(raw_query, data_conn, parse_dates=['price_date'])
@@ -109,22 +109,16 @@ def fetch_market_data(days=400, window=15, region=10000002, debug=global_debug):
 	# raw_data_filled['price_delta_smm2'] = raw_data_filled['price_delta_smm'] ** 2
 
 	desired_stats = ['volume','price_delta_sma','price_delta_smm']
-
-	V.raw_data_filled = raw_data_filled
+	raw_data_filled.index = raw_data_filled.itemid
+	raw_data_filled = raw_data_filled.groupby('itemid').tail(days)
 	return raw_data_filled.groupby('itemid')
 	
-def market_report(data_groups, report_sigmas, filter_sigmas, region=10000002, debug=global_debug):
+def crunch_market_stats(data_groups, report_sigmas, filter_sigmas, region=10000002, debug=global_debug):
 	global V, desired_stats
 
 	desired = desired_stats
 
-	# only does volume atm.
 	print 'Crunching Stats'
-	print_array = []
-	header = []
-	header = build_header(report_sigmas)
-	#if debug: print header
-	print_array.append(header)
 	
 	def p(x, s): 
 		c = x.dropna()
@@ -139,7 +133,7 @@ def market_report(data_groups, report_sigmas, filter_sigmas, region=10000002, de
 
 	MIN = new_func('MIN', lambda x: x.min())
 	P10 = new_func('P10', lambda x: numpy.percentile(x, 10))
-	MED = new_func('MED', lambda x: numpy.median(x))
+	MED = new_func('MED', lambda x: x.median())
 	AVG = new_func('AVG', lambda x: x.mean())
 	P90 = new_func('P90', lambda x: numpy.percentile(x, 90))
 	MAX = new_func('MAX', lambda x: x.max())
@@ -152,12 +146,12 @@ def market_report(data_groups, report_sigmas, filter_sigmas, region=10000002, de
 		standard_stats = [MIN, P10, MED, AVG, P90, MAX, STD]
 		sigma_stats = report_sigmas
 
-	stats = data_groups[desired].agg(standard_stats)
-	qs = data_groups[desired].quantile([norm.cdf(sig) for sig in sigma_stats])
-	qs.index.names = ['itemid','sigma']
-	qs.index.set_levels(sigma_stats, level=1, inplace=True)
-	stats = pd.merge(stats, qs.unstack(), left_index=True, right_index=True, copy=False)
+	V.stats = stats = data_groups[desired].agg(standard_stats)
 	stats[('all','count')] = data_groups['present'].count()
+	V.qs = qs = data_groups[desired].quantile([norm.cdf(sig) for sig in sigma_stats])
+	qs.index.names = ['itemid','sigma']
+	qs.index.set_levels([str(s) for s in sigma_stats], level=1, inplace=True)
+	stats = pd.merge(stats, qs.unstack(), left_index=True, right_index=True, copy=False)
 
 	V.stats = stats
 	return stats
@@ -165,88 +159,51 @@ def market_report(data_groups, report_sigmas, filter_sigmas, region=10000002, de
 def sig_int_to_str(sigma_num):
 	return "S{:.1f}".format(sigma_num).replace("-","N").replace(".","P")
 
-def build_header (report_sigmas,standard_stats = True):
-	header = []
-	header.append('typeid')
-	header.append('typename')
-	header.append('N')
-	if standard_stats:
-		header.append('MIN')
-		header.append('P10')
-		header.append('MED')
-		header.append('AVG')
-		header.append('P90')
-		header.append('MAX')
-		header.append('STD')
-	for sigma_num in report_sigmas:
-		sigma_str = sig_int_to_str(sigma_num)
-		header.append(sigma_str)
-		
-	return header
-	
-def crunch_item_stats(item_id, data_group, expected_dates, report_sigmas, standard_stats = True):
 
-	results_array = []
-	data_array = vol_list
-	n_count = len(vol_list)
-	results_array.append(itemid)
-	results_array.append(convert.at[itemid,'name'])
-	results_array.append(n_count)
-	
-	filled_group = pd.mer
+def flag_volume(v, vol_floor, stats):
+	itemid = v.index[0]
+	if v[v == 0].any(): return -numpy.inf
+	m = v.mean()
+	if m < vol_floor: return numpy.nan
+	cuts = cuts_from_stats(stats, itemid, 'volume')
+	if not cuts: return numpy.inf
+	val = pd.cut([m], **cuts)[0]
+	return val
 
-	if n_count < expected_length:	#append zeros to make sigmas match sample size
-		for range in (0, expected_length - n_count):
-			data_array.append(0)
-			
-	if standard_stats:
-		results_array.append(numpy.amin(data_array))
-		results_array.append(numpy.percentile(data_array,10))
-		results_array.append(numpy.median(data_array))
-		results_array.append(numpy.average(data_array))
-		results_array.append(numpy.percentile(data_array,90))
-		results_array.append(numpy.amax(data_array))
-		results_array.append(numpy.std(data_array))
-	
-	for sigma in report_sigmas:
-		
-		pctile = norm.cdf(sigma)
-			
-		if n_count < (1/pctile):	#Not enough samples to report sigma value
-			results_array.append(None)
-		else:
-			percent = pctile if sigma <= 0 else 1 - pctile
-			results_array.append(numpy.percentile(data_array,percent*100))
-	
-	return results_array
-	
-def dictify(header_list,data_list):
-	return_dict = {}
-	for row in data_list:
-		return_dict[row[0]] = {}
-		header_index = 0
-		for col in header_list:
-			return_dict[row[0]][col] = row[header_index]
-			header_index += 1
-	
-	return return_dict
+def flag_price(p, price_stat, stats):
+	itemid = p.index[0]
+	if p.isnull().any(): return -numpy.inf
+	cuts = cuts_from_stats(stats, itemid, price_stat)
+	if not cuts: return numpy.inf
+	flags = pd.cut(p, **cuts)
+	if flags[flags <> 0].count() > 0:
+		cmax = flags.max()
+		cmin = flags.min()
+		return cmin if abs(cmin) > abs(cmax) else cmax
+	else:
+		return numpy.nan
 	
 def volume_sigma_report(
-		market_sigmas, 
+		stats, 
 		data_groups, 
-		filter_sigmas, 
 		days, 
 		vol_floor = 100, 
 		region=10000002,
 		debug=global_debug
 		):
 	global V
-	# Drop all but last `days` data from all groups
-	vol_means = data_groups.tail(10).groupby('itemid').mean()
-	V.vol_means = vol_means
-	return
-	of_interest = pd.merge(vol_means, market_sigmas, left_on='itemid', right_on='itemid')
-	V.of_interest = of_interest
+
+	def flag_vol(p): flag_volume(p, vol_floor, stats)
+	def flag_smm(p): flag_price(p, 'price_delta_smm', stats)
+	def flag_sma(p): flag_price(p, 'price_delta_sma', stats) 
+
+	flags_wanted = {
+		'volume': flag_vol,
+		'price_delta_smm': flag_smm,
+		'price_delta_sma': flag_sma
+		}
+	V.flags_wanted = flags_wanted
+
 	return
 	#Build pseudo-header for report.  Top level keys for return dict
 	result_dict = {}
@@ -264,7 +221,7 @@ def volume_sigma_report(
 		if avg_value < vol_floor:
 			continue	#filter out very low volumes
 		try:
-			market_sigmas[typeid]
+			stats[typeid]
 		except KeyError as e:
 			continue
 		
@@ -274,7 +231,7 @@ def volume_sigma_report(
 			if sigma >=0:
 				break	#do negative sigmas first
 			sig_str = sig_int_to_str(sigma)
-			flag_limit = market_sigmas[typeid][sig_str]
+			flag_limit = stats[typeid][sig_str]
 			if avg_value < flag_limit:
 				result_dict[sig_str].append(typeid)
 				break #most extreme sigma found, stop looking
@@ -285,7 +242,7 @@ def volume_sigma_report(
 			if sigma <=0:
 				break	#don't do SIG0
 			sig_str = sig_int_to_str(sigma)
-			flag_limit = market_sigmas[typeid][sig_str]
+			flag_limit = stats[typeid][sig_str]
 			if avg_value > flag_limit:
 				result_dict[sig_str].append(typeid)
 				break #most extreme sigma found, stop looking
@@ -377,7 +334,7 @@ def main(region=10000002):
 		-1.5,
 		-1.0,
 		-0.5,
-		 0.0,
+		 # 0.0,
 		 0.5,
 		 1.0,
 		 1.5,
@@ -415,7 +372,7 @@ def main(region=10000002):
 	V.convert = convert
 	market_data_groups = fetch_market_data(region=region)
 	V.market_data_groups = market_data_groups
-	market_sigmas = market_report(market_data_groups, report_sigmas, filter_sigmas, region=region)
+	market_sigmas = crunch_market_stats(market_data_groups, report_sigmas, filter_sigmas, region=region)
 	V.market_sigmas = market_sigmas
 	flaged_items_vol = volume_sigma_report(
 		market_sigmas, 
@@ -450,13 +407,34 @@ def main(region=10000002):
 
 def cuts_from_stats(stats, itemid, category):
 	s = stats.loc[itemid, category]
-	r = s.iloc[4:10]
-	labels = r.index.tolist()
-	labels.insert(3,0.0)
+	r = s.loc['-2.5':'2.5']
+	if r.isnull().any(): return {}
+	can_flag = abs(norm.ppf(1.0/stats.loc[itemid, ('all','count')]))
+	labels = [float(l) for l in r.index.tolist()]
+	if 0.0 in labels: raise Exception('0.0  disallowed in flagging sigmas!!')
+	prev_l = -numpy.inf
+	z_loc = -1
+	for z, l in enumerate(labels):
+		if prev_l < 0 and l > 0:
+			z_loc = z
+			break
+	if z_loc >= 0:
+		labels.insert(z_loc, 0.0)
+	else:
+		labels.append(0.0)
 	values = r.values.tolist()
-	values.insert(0,float('-inf'))
-	values.append(float('inf'))
-	return {'bins':values, 'labels':labels}
+	values.append(numpy.inf)
+	prev_v = -numpy.inf
+	fixed_vals = [prev_v]
+	fixed_labels = []
+	for l, v in zip(labels, values):
+		if abs(l) > can_flag or v <= prev_v:
+			prev_v = v
+			continue
+		fixed_vals.append(v)
+		fixed_labels.append(l)
+		prev_v = v
+	return {'bins': fixed_vals, 'labels': fixed_labels} if fixed_labels else {}
 
 def plot_flag(itemid, data_groups, stats, desired, style=('go','ro'), range=slice(None,None)):
 	cuts = cuts_from_stats(stats, itemid, desired)
