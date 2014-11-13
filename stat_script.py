@@ -20,6 +20,10 @@ from ema_config import *
 
 global V
 
+localdir = "C:\Users\John\Dropbox\EMA"
+
+basedir = localdir if os.path.exists(localdir) else ""
+
 class AttrLogger(object):
 	def __init__(self):
 		super(AttrLogger, self).__setattr__('start_time', time.clock())
@@ -106,11 +110,16 @@ def fetch_market_data(days=366, window=15, region=10000002, debug=global_debug):
 				)
 			)
 
-	# raw_data_filled['price_delta_smm2'] = raw_data_filled['price_delta_smm'] ** 2
-
+	V.raw_data_filled = raw_data_filled
+	# raw_data_filled['price_delta_smm2'] = raw_data_filled['price_delta_smm'] ** 2 
 	desired_stats = ['volume','price_delta_sma','price_delta_smm']
 	raw_data_filled.index = raw_data_filled.itemid
-	raw_data_filled = raw_data_filled.groupby('itemid').tail(days)
+	raw_data_filled = \
+		raw_data_filled \
+		.groupby('itemid') \
+		.filter(lambda x: len(x.index) >= window) \
+	    .groupby('itemid') \
+		.tail(days)
 	return raw_data_filled.groupby('itemid')
 	
 def crunch_market_stats(data_groups, report_sigmas, filter_sigmas, region=10000002, debug=global_debug):
@@ -159,31 +168,52 @@ def crunch_market_stats(data_groups, report_sigmas, filter_sigmas, region=100000
 def sig_int_to_str(sigma_num):
 	return "S{:.1f}".format(sigma_num).replace("-","N").replace(".","P")
 
+def cmp_sigs(x, y):
+	x_val, x_ct = x
+	y_val, y_ct = y
+	if x_ct == y_ct:
+		if abs(y_val) == abs(x_val):
+			return 1 if x_val < y_val else -1
+		else:
+			return 1 if abs(x_val) < abs(y_val) else -1
+	else:
+		return 1 if x_ct < y_ct else -1
 
 def flag_volume(v, vol_floor, stats):
 	itemid = v.index[0]
-	if v[v == 0].any(): return -numpy.inf
+	if v[v == 0].any() or v.isnull().any(): return numpy.nan
 	m = v.mean()
 	if m < vol_floor: return numpy.nan
 	cuts = cuts_from_stats(stats, itemid, 'volume')
-	if not cuts: return numpy.inf
+	if not cuts: return numpy.nan
 	val = pd.cut([m], **cuts)[0]
-	return val
+	return "vol{: >4.1f}".format(val) if val <> 0.0 else numpy.nan
 
-def flag_price(p, price_stat, stats):
+def label_from_flags(flags):
+	vcl = list(flags[flags<>0.0].value_counts().iteritems())
+	vcl.sort(cmp_sigs)
+	return vcl[0][0]
+
+def flag_price(p, price_stat, stats, min_flags=5):
 	itemid = p.index[0]
-	if p.isnull().any(): return -numpy.inf
+	if p.isnull().any(): 
+		return numpy.nan
 	cuts = cuts_from_stats(stats, itemid, price_stat)
-	if not cuts: return numpy.inf
+	if not cuts: 
+		return numpy.nan
 	flags = pd.cut(p, **cuts)
-	if flags[flags <> 0].count() > 0:
-		cmax = flags.max()
-		cmin = flags.min()
-		return cmin if abs(cmin) > abs(cmax) else cmax
+	if flags[flags <> 0].count() >= min_flags:
+		return label_from_flags(flags)
 	else:
 		return numpy.nan
-	
-def volume_sigma_report(
+
+def price_pair_to_group(r):
+	i, smm, sma = r
+	smm_ = "{: >4.1f}".format(smm) if not numpy.isnan(smm) else "____"
+	sma_ = "{: >4.1f}".format(sma) if not numpy.isnan(sma) else "____"
+	return "Psmm{0}=sma{1}".format(smm_,sma_)
+
+def sigma_report(
 		stats, 
 		data_groups, 
 		days, 
@@ -193,9 +223,9 @@ def volume_sigma_report(
 		):
 	global V
 
-	def flag_vol(p): flag_volume(p, vol_floor, stats)
-	def flag_smm(p): flag_price(p, 'price_delta_smm', stats)
-	def flag_sma(p): flag_price(p, 'price_delta_sma', stats) 
+	def flag_vol(v): return flag_volume(v, vol_floor, stats)
+	def flag_smm(p): return flag_price(p, 'price_delta_smm', stats)
+	def flag_sma(p): return flag_price(p, 'price_delta_sma', stats) 
 
 	flags_wanted = {
 		'volume': flag_vol,
@@ -203,54 +233,28 @@ def volume_sigma_report(
 		'price_delta_sma': flag_sma
 		}
 	V.flags_wanted = flags_wanted
+	flagged = \
+		data_groups \
+		.tail(days) \
+		.groupby('itemid') \
+	    .filter(lambda x: x.volume.mean() >= 5) \
+		.groupby('itemid') \
+		.agg(flags_wanted) \
+		.dropna(how='all') \
+		.reset_index()
+	flagged.index = flagged.itemid
+	V.flagged = flagged
+	V.vol_flagged = vol_flagged = flagged[['itemid','volume']].dropna().groupby('volume').groups
+	price_flags = \
+		flagged[flagged.volume.isnull()][['itemid','price_delta_smm','price_delta_sma']] \
+		.dropna(how='all', subset=['price_delta_smm','price_delta_sma'])
+	price_flags['price'] = price_flags.apply(price_pair_to_group, axis=1)
+	V.price_flagged = price_flagged = price_flags[['price','itemid']].groupby('price').groups
 
-	return
-	#Build pseudo-header for report.  Top level keys for return dict
-	result_dict = {}
-	filter_sigmas.sort()
-	if (0 in filter_sigmas) or (0.0 in filter_sigmas):
-		print '0 Sigma (MED) not supported'
-		#Not sure if > or < than MED for flagging.  Do MED flagging in another function
-	for sigma in filter_sigmas:
-		sig_str = sig_int_to_str(sigma)
-		result_dict[sig_str] = []
+	return vol_flagged, price_flagged
 
-	print 'Parsing data'
-	for item in of_interest:
-		avg_value = numpy.average(vol_list)
-		if avg_value < vol_floor:
-			continue	#filter out very low volumes
-		try:
-			stats[typeid]
-		except KeyError as e:
-			continue
-		
-		filter_sigmas.sort()
-		#check negative sigmas	
-		for sigma in filter_sigmas:
-			if sigma >=0:
-				break	#do negative sigmas first
-			sig_str = sig_int_to_str(sigma)
-			flag_limit = stats[typeid][sig_str]
-			if avg_value < flag_limit:
-				result_dict[sig_str].append(typeid)
-				break #most extreme sigma found, stop looking
-		
-		filter_sigmas.sort(reverse=True)
-		#check positive sigmas
-		for sigma in filter_sigmas:
-			if sigma <=0:
-				break	#don't do SIG0
-			sig_str = sig_int_to_str(sigma)
-			flag_limit = stats[typeid][sig_str]
-			if avg_value > flag_limit:
-				result_dict[sig_str].append(typeid)
-				break #most extreme sigma found, stop looking
-		
-	return result_dict			
-
-def fetch_and_plot(data_struct, TA_args = "", region=10000002):
-	global R_configured
+def fetch_and_plot(data_struct, which_flags, TA_args = "", region=10000002):
+	global R_configured, basedir
 	if not R_configured:
 		print 'Setting up R libraries'
 		importr('jsonlite')
@@ -259,12 +263,13 @@ def fetch_and_plot(data_struct, TA_args = "", region=10000002):
 		R_configured = True
 
 	print 'setting up dump path'
-	if not os.path.exists('plots/%s' % today):
-		os.makedirs('plots/%s' % today)
+	out_dir = os.path.join(basedir, 'plots', today, which_flags)
+	if not os.path.exists(out_dir):
+		os.makedirs(out_dir)
 	
 	for group, item_list in data_struct.iteritems():
-		print 'crunching %s' % group
-		dump_path = 'plots/%s/%s' % (today, group)
+		dump_path = os.path.join('plots', today, which_flags, group).replace("\\","/")
+		print dump_path
 		if not os.path.exists(dump_path):
 			os.makedirs(dump_path)
 			
@@ -359,13 +364,13 @@ def main(region=10000002):
 
 	convert = psql.read_sql(
 		'''SELECT typeid as itemid, typename as name
- 		   FROM invtypes conv
- 		   JOIN invgroups grp ON (conv.groupID = grp.groupID)
- 		   WHERE marketgroupid IS NOT NULL
- 		   AND conv.published = 1
- 		   AND grp.categoryid NOT IN (9,16,350001,2)
+		   FROM invtypes conv
+		   JOIN invgroups grp ON (conv.groupID = grp.groupID)
+		   WHERE marketgroupid IS NOT NULL
+		   AND conv.published = 1
+		   AND grp.categoryid NOT IN (9,16,350001,2)
 		   AND grp.groupid NOT IN (30,659,485,485,873,883)
- 		   ORDER BY itemid''', 
+		   ORDER BY itemid''', 
 		sde_conn, 
 		index_col=['itemid']
 		)
@@ -374,17 +379,17 @@ def main(region=10000002):
 	V.market_data_groups = market_data_groups
 	market_sigmas = crunch_market_stats(market_data_groups, report_sigmas, filter_sigmas, region=region)
 	V.market_sigmas = market_sigmas
-	flaged_items_vol = volume_sigma_report(
-		market_sigmas, 
-		market_data_groups, 
-		filter_sigmas, 
-		15, 
-		region=region
-		)
-	return ####
-	#print flaged_items
-	outfile = open('sig_flags.txt','w')
-	for sig_level,itemids in flaged_items_vol.iteritems():
+	data_groups = market_data_groups
+	vol_flagged, price_flagged = \
+		sigma_report(
+			market_sigmas, 
+			market_data_groups,  
+			10, 
+			region=region
+			)
+	print "write flagged groups"
+	outfile = open(os.path.join(basedir,'sig_flags.txt'),'w')
+	for sig_level,itemids in itertools.chain(vol_flagged.iteritems(), price_flagged.iteritems()):
 		outfile.write('%s FLAGS\n' % sig_level)
 		for item in itemids:
 			itemname=''
@@ -395,15 +400,19 @@ def main(region=10000002):
 			outfile.write('\t%s,%s\n' % (item,itemname))
 		
 	outfile.close()
-	
-	print 'Plotting Flagged Group'
-	fetch_and_plot(flaged_items_vol,region=region)
+	print 'Plotting price test'
+	s2p5 = {"Psmm-2.5=sma-2.5": price_flagged["Psmm-2.5=sma-2.5"]}
+	fetch_and_plot(s2p5, 'price-test')
+
+	print 'Plotting  Group'
+	fetch_and_plot(price_flagged, 'price', region=region)
+	fetch_and_plot(vol_flagged, 'volume', region=region)
 	
 	print 'Plotting Forced Group'
 	R_config_file = open(conf.get('STATS','R_config_file'),'r')
 	R_todo = json.load(R_config_file)
-	fetch_and_plot(R_todo['forced_plots'],";addRSI();addLines(h=30, on=4);addLines(h=70, on=4)",region=region)
-	print 'Plotting Forced Group'
+	fetch_and_plot(R_todo['forced_plots'], 'forced', ";addRSI();addLines(h=30, on=4);addLines(h=70, on=4)",region=region)
+
 
 def cuts_from_stats(stats, itemid, category):
 	s = stats.loc[itemid, category]
@@ -469,8 +478,6 @@ def hist_compare(itemid, desired=['price_delta_smm','price_delta_sma']):
 	)
 
 if __name__ == "__main__":
-	main()
-else:
 	main()
 	
 	#for region in trunc_region_list.iterkeys():
