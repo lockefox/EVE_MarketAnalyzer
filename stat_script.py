@@ -268,7 +268,7 @@ def fetch_and_plot(data_struct, which_flags, TA_args = "", region=10000002):
 		os.makedirs(out_dir)
 	
 	for group, item_list in data_struct.iteritems():
-		dump_path = os.path.join('plots', today, which_flags, group).replace("\\","/")
+		dump_path = os.path.join(basedir, 'plots', today, which_flags, group).replace("\\","/")
 		print dump_path
 		if not os.path.exists(dump_path):
 			os.makedirs(dump_path)
