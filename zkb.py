@@ -304,7 +304,7 @@ class Query(object):
 			yield result_JSON
 			
 	def __str__ (self):
-		if self.IDcount < 2:
+		if self.IDcount < 1:
 			raise QueryException(-1)
 		query_modifiers = self.queryArgs
 		for key,value in self.queryElements.iteritems():
@@ -398,7 +398,7 @@ def fetchResult(zkb_url):
 		except urllib2.HTTPError as e:
 			#log_filehandle.write("%s: %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), e))
 			print "retry %s: %s" %(zkb_url,tries+1)
-			print http_header
+			#print http_header
 			continue
 		except urllib2.URLError as er:
 			#log_filehandle.write("%s: %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), er))

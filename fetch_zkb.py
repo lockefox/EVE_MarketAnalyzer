@@ -178,7 +178,7 @@ def backfill_loss_values():
 
 def build_commit_str_participants(kill_entry, base_kill_dict, isVictim = False):
 	
-	killID        = base_kill_dict['killID']
+	killID        = base_kill_dict['kill_id']
 	solarSystemID = base_kill_dict['solarSystemID']
 	kill_time     = base_kill_dict['kill_time']
 	
@@ -186,7 +186,7 @@ def build_commit_str_participants(kill_entry, base_kill_dict, isVictim = False):
 	if isVictim:
 		isVictim_val = 1
 		
-	shipTtpeID    = int(kill_entry['shipTypeID'])
+	shipTypeID    = int(kill_entry['shipTypeID'])
 	damage        = 0
 	if isVictim:
 		damage = int(kill_entry['damageTaken'])
@@ -202,7 +202,7 @@ def build_commit_str_participants(kill_entry, base_kill_dict, isVictim = False):
 		factionID = 'NULL'
 	finalBlow = 'NULL'
 	if not isVictim:
-		finalBlow = int(kill_entry['finalBlow']
+		finalBlow = int(kill_entry['finalBlow'])
 	weaponTypeID = 'NULL'
 	if not isVictim:
 		weaponTypeID = int(kill_entry['weaponTypeID'])
@@ -214,9 +214,11 @@ def build_commit_str_participants(kill_entry, base_kill_dict, isVictim = False):
 		killID,\
 		solarSystemID,\
 		kill_time,\
+		shipTypeID,\
 		isVictim_val,\
 		damage,\
 		characterID,\
+		corporationID,\
 		allianceID,\
 		factionID,\
 		finalBlow,\
@@ -226,7 +228,7 @@ def build_commit_str_participants(kill_entry, base_kill_dict, isVictim = False):
 	return return_str
 
 def build_commit_str_fits(item_list, base_kill_dict):
-	killID      = base_kill_dict['killID']
+	killID      = base_kill_dict['kill_id']
 	shipTypeID  = base_kill_dict['shipTypeID']
 	
 	typeID       = item_list['typeID']
@@ -238,6 +240,7 @@ def build_commit_str_fits(item_list, base_kill_dict):
 	return_str = '''(%s,%s,%s,%s,%s,%s,%s)''' % (\
 		killID,\
 		shipTypeID,\
+		typeID,\
 		flag,\
 		qtyDropped,\
 		qtyDestroyed,\
@@ -253,14 +256,15 @@ def write_kills_to_SQL(zkb_return):
 	for kill in zkb_return:
 		base_kill_dict = {}
 		
-		base_kill_dict['kill_id ']       = int(kill['killID'])
-		base_kill_dict['solarSystemId']  = int(kill['solarSystemID'])
+		base_kill_dict['kill_id']       = int(kill['killID'])
+		base_kill_dict['solarSystemID']  = int(kill['solarSystemID'])
 		base_kill_dict['kill_time']      = kill['killTime']	#convert to datetime for writing to db?
 		base_kill_dict['totalValue']     = 'NULL'
-		if 'totalValue' in kill['zkb']:
-			if int(kill['zkb']['totalValue']) != 0:
-				base_kill_dict['totalValue'] = int(kill['zkb']['totalValue']) 
-				
+		if 'zkb' in kill:
+			if 'totalValue' in kill['zkb']:
+				if int(float(kill['zkb']['totalValue'])) != 0:
+					base_kill_dict['totalValue'] = float(kill['zkb']['totalValue']) 
+					
 		base_kill_dict['shipTypeID']     = int(kill['victim']['shipTypeID'])
 		##PARSE VICTIM##
 		tmp_commit_str = build_commit_str_participants(kill['victim'], base_kill_dict, True)
@@ -283,8 +287,8 @@ def write_kills_to_SQL(zkb_return):
 			victim_factionID = int(kill['victim']['factionID'])
 			
 		losses_str = '''(%s,%s,'%s',%s,%s,%s,%s,%s,%s,%s,%s)'''%(\
-			base_kill_dict['kill_id '],\
-			base_kill_dict['solarSystemId'],\
+			base_kill_dict['kill_id'],\
+			base_kill_dict['solarSystemID'],\
 			base_kill_dict['kill_time'],\
 			base_kill_dict['shipTypeID'],\
 			kill['victim']['damageTaken'],\
@@ -296,24 +300,33 @@ def write_kills_to_SQL(zkb_return):
 			len(kill['attackers']))
 			
 		losses_list.append(losses_str)
+	print 'fits'
+	print fits_list
+	print 'participants'
+	print participants_list
+	print 'losses'
+	print losses_list
+	sys.exit(1)
 	
 def main():
 	_validate_connection()
 	#TODO: test if zkb API is up
+	print 'Building crash object'
 	ProgressObj = Progress()
 	
-	
+	print 'Fetching zkb data'
 	####FETCH LIVE KILL DATA####
 	for group in ProgressObj.groups_remaining:
 		QueryObj = zkb.Query(api_fetch_limit)
 		
 		##TODO: add multi-group scraping.  Joined group_list should work in setup below
-		if   ProgressObj.mode = 'SHIP': QueryObj.shipID(group)
-		elif ProgressObj.mode = 'GROUP': QueryObj.groupID(group)
+		if   ProgressObj.mode == 'SHIP': QueryObj.shipID(group)
+		elif ProgressObj.mode == 'GROUP': QueryObj.groupID(group)
 		else: 
 			print 'Unsupported fetch method: %s' % method.upper()
 			sys.exit(2)
-		
+		QueryObj.api_only
+		print 'Fetching %s' % QueryObj
 		for kill_list in QueryObj:
 			write_kills_to_SQL(kill_list)
 			#TODO: write killid list to ProgressObj
