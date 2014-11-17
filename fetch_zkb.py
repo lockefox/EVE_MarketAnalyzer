@@ -8,7 +8,7 @@ import zkb
 
 import itertools
 flatten = itertools.chain.from_iterable
-
+current_milli_time = lambda: int(round(time.time() * 1000))
 conf = ConfigParser.ConfigParser()
 conf.read(['init.ini','init_local.ini'])
 
@@ -257,7 +257,7 @@ def fetch_headers(table_name, db_cur):
 	table_header_str = table_header_str.rstrip(',')
 	table_headers[table_name] = table_header_str
 	
-def write_kills_to_SQL(zkb_return, db_cur, debug=False):
+def write_kills_to_SQL(zkb_return, db_cur, debug=False):	
 	fits_list = []	#all items lost in fights
 	participants_list = [] #all participants (victims and killers)
 	losses_list = []	#truncated list of just victims and destroyed 
@@ -309,7 +309,8 @@ def write_kills_to_SQL(zkb_return, db_cur, debug=False):
 			len(kill['attackers']))
 			
 		losses_list.append(losses_str)
-	
+	parse_time = current_milli_time() - starttime
+	parse_snap = current_milli_time()
 	
 ####WRITE PARTICIPANTS TABLE####
 	if zkb_participants not in table_headers:
@@ -368,7 +369,6 @@ def write_kills_to_SQL(zkb_return, db_cur, debug=False):
 	if debug: print losses_commit_str
 	db_cur.execute(losses_commit_str).commit()
 	
-	
 def main():
 	_validate_connection()
 	#TODO: test if zkb API is up
@@ -390,10 +390,11 @@ def main():
 		QueryObj.api_only
 		print 'Fetching %s' % QueryObj
 		for kill_list in QueryObj:
-			write_kills_to_SQL(kill_list,data_cur,True)
+			print '\t%s' % QueryObj
+			write_kills_to_SQL(kill_list,data_cur,False)
 			#TODO: write killid list to ProgressObj
 			
 		ProgressObj.group_complete(group)	#TODO: will need to parse out CSV to list?
-	
+		#sys.exit(1)
 if __name__ == "__main__":
 	main()
