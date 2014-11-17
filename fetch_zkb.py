@@ -215,8 +215,8 @@ def build_commit_str_participants(kill_entry, base_kill_dict, isVictim = False):
 		killID,\
 		solarSystemID,\
 		kill_time,\
-		shipTypeID,\
 		isVictim_val,\
+		shipTypeID,\
 		damage,\
 		characterID,\
 		corporationID,\
@@ -252,7 +252,7 @@ def build_commit_str_fits(item_list, base_kill_dict):
 def fetch_headers(table_name, db_cur):
 	global table_headers
 	table_header_query = '''SHOW COLUMNS FROM `%s`''' % table_name
-	table_header_list = [column[0] for column in db_cur.execute(header_query).fetchall()]
+	table_header_list = [column[0] for column in db_cur.execute(table_header_query).fetchall()]
 	table_header_str = ','.join(table_header_list)
 	table_header_str = table_header_str.rstrip(',')
 	table_headers[table_name] = table_header_str
@@ -311,7 +311,7 @@ def write_kills_to_SQL(zkb_return, db_cur, debug=False):
 		losses_list.append(losses_str)
 	
 	
-	####WRITE PARTICIPANTS TABLE####
+####WRITE PARTICIPANTS TABLE####
 	if zkb_participants not in table_headers:
 		fetch_headers(zkb_participants, db_cur)
 	
@@ -321,13 +321,53 @@ def write_kills_to_SQL(zkb_return, db_cur, debug=False):
 		participants_commit_str = '%s %s,' % (participants_commit_str,participant_str)
 	
 	participants_commit_str = participants_commit_str.rstrip(',')
+		#DUPLICATE OVERWRITE#
+	participants_duplicate = '''ON DUPLICATE KEY UPDATE''' #TODO: figure out a dynamic way to use duplicate key lookup
+	for header in table_headers[zkb_participants].split(','):
+		participants_duplicate = '%s %s=%s,' % (participants_duplicate, header, header)
+	participants_commit_str = '%s %s' % (participants_commit_str, participants_duplicate.rstrip(','))
+		#-------------------#
 	if debug: print participants_commit_str
 	db_cur.execute(participants_commit_str).commit()	
-	print 'fits'
-	print fits_list
-	print 'losses'
-	print losses_list
-	sys.exit(1)
+	
+####WRITE FITS TABLE####
+	if zkb_fits not in table_headers:
+		fetch_headers(zkb_fits, db_cur)
+		
+	fits_commit_str = '''INSERT INTO %s (%s) VALUES''' % (zkb_fits, table_headers[zkb_fits])
+	
+	for fits_str in fits_list:
+		fits_commit_str = '%s %s,' % (fits_commit_str, fits_str)
+		
+	fits_commit_str = fits_commit_str.rstrip(',')
+		#DUPLICATE OVERWRITE#
+	fits_duplicate = '''ON DUPLICATE KEY UPDATE''' #TODO: figure out a dynamic way to use duplicate key lookup
+	for header in table_headers[zkb_fits].split(','):
+		fits_duplicate = '%s %s=%s,' % (fits_duplicate, header, header)
+	fits_commit_str = '%s %s' % (fits_commit_str, fits_duplicate.rstrip(','))
+		#-------------------#
+	if debug: print fits_commit_str
+	db_cur.execute(fits_commit_str).commit()
+
+####WRITE LOSSES TABLE####
+	if zkb_trunc_stats not in table_headers:
+		fetch_headers(zkb_trunc_stats, db_cur)
+		
+	losses_commit_str = '''INSERT INTO %s (%s) VALUES''' % (zkb_trunc_stats, table_headers[zkb_trunc_stats])
+	
+	for losses_str in losses_list:
+		losses_commit_str = '%s %s,' % (losses_commit_str, losses_str)
+		
+	losses_commit_str = losses_commit_str.rstrip(',')
+		#DUPLICATE OVERWRITE#
+	losses_duplicate = '''ON DUPLICATE KEY UPDATE''' #TODO: figure out a dynamic way to use duplicate key lookup
+	for header in table_headers[zkb_trunc_stats].split(','):
+		losses_duplicate = '%s %s=%s,' % (losses_duplicate, header, header)
+	losses_commit_str = '%s %s' % (losses_commit_str, losses_duplicate.rstrip(','))
+		#-------------------#
+	if debug: print losses_commit_str
+	db_cur.execute(losses_commit_str).commit()
+	
 	
 def main():
 	_validate_connection()
@@ -335,6 +375,7 @@ def main():
 	print 'Building crash object'
 	ProgressObj = Progress()
 	
+	data_conn, data_cur, sde_conn, sde_cur = connect_local_databases()
 	print 'Fetching zkb data'
 	####FETCH LIVE KILL DATA####
 	for group in ProgressObj.groups_remaining:
@@ -349,7 +390,7 @@ def main():
 		QueryObj.api_only
 		print 'Fetching %s' % QueryObj
 		for kill_list in QueryObj:
-			write_kills_to_SQL(kill_list)
+			write_kills_to_SQL(kill_list,data_cur,True)
 			#TODO: write killid list to ProgressObj
 			
 		ProgressObj.group_complete(group)	#TODO: will need to parse out CSV to list?
