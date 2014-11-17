@@ -33,7 +33,8 @@ api_fetch_limit = conf.get('ZKB','api_fetch_limit')
 zkb_base_query = conf.get('ZKB','base_query')
 default_group_mode = conf.get('ZKB','group_routine')
 
-progress_object = {}
+table_headers = {}
+
 
 class Progress(object):
 	__initialized = False
@@ -247,8 +248,16 @@ def build_commit_str_fits(item_list, base_kill_dict):
 		singleton)
 		
 	return return_str
+
+def fetch_headers(table_name, db_cur):
+	global table_headers
+	table_header_query = '''SHOW COLUMNS FROM `%s`''' % table_name
+	table_header_list = [column[0] for column in db_cur.execute(header_query).fetchall()]
+	table_header_str = ','.join(table_header_list)
+	table_header_str = table_header_str.rstrip(',')
+	table_headers[table_name] = table_header_str
 	
-def write_kills_to_SQL(zkb_return):
+def write_kills_to_SQL(zkb_return, db_cur, debug=False):
 	fits_list = []	#all items lost in fights
 	participants_list = [] #all participants (victims and killers)
 	losses_list = []	#truncated list of just victims and destroyed 
@@ -300,10 +309,22 @@ def write_kills_to_SQL(zkb_return):
 			len(kill['attackers']))
 			
 		losses_list.append(losses_str)
+	
+	
+	####WRITE PARTICIPANTS TABLE####
+	if zkb_participants not in table_headers:
+		fetch_headers(zkb_participants, db_cur)
+	
+	participants_commit_str = '''INSERT INTO %s (%s) VALUES''' % (zkb_participants,table_headers[zkb_participants])
+	
+	for participant_str in participants_list:
+		participants_commit_str = '%s %s,' % (participants_commit_str,participant_str)
+	
+	participants_commit_str = participants_commit_str.rstrip(',')
+	if debug: print participants_commit_str
+	db_cur.execute(participants_commit_str).commit()	
 	print 'fits'
 	print fits_list
-	print 'participants'
-	print participants_list
 	print 'losses'
 	print losses_list
 	sys.exit(1)
@@ -332,6 +353,6 @@ def main():
 			#TODO: write killid list to ProgressObj
 			
 		ProgressObj.group_complete(group)	#TODO: will need to parse out CSV to list?
-		
+	
 if __name__ == "__main__":
 	main()
