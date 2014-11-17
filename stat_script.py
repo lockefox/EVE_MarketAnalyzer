@@ -387,6 +387,7 @@ def main(region=10000002):
 			10, 
 			region=region
 			)
+	return
 	print "write flagged groups"
 	outfile = open(os.path.join(basedir,'sig_flags.txt'),'w')
 	for sig_level,itemids in itertools.chain(vol_flagged.iteritems(), price_flagged.iteritems()):
@@ -452,8 +453,10 @@ def plot_flag(itemid, data_groups, stats, desired, style=('go','ro'), range=slic
 	fname = desired + "_flag"
 	g[fname] = pd.cut(g[desired], **cuts)
 	ax = g.avgprice[range].plot()
-	ax = g[g[fname]<0.0].avgprice[range].plot(style=style[0])
-	ax = g[g[fname]>0.0].avgprice[range].plot(style=style[1])
+	if not g[g[fname]<0.0].avgprice[range].empty:
+		ax = g[g[fname]<0.0].avgprice[range].plot(style=style[0], markersize=10, alpha=0.5, ax=ax)
+	if not g[g[fname]>0.0].avgprice[range].empty:
+		ax = g[g[fname]>0.0].avgprice[range].plot(style=style[1], markersize=10, alpha=0.5, ax=ax)
 	return ax
 
 def plot_flags(
@@ -462,7 +465,7 @@ def plot_flags(
 		stats, 
 		desired=['price_delta_sma', 'price_delta_smm', 'volume'], 
 		range=slice(None,None),
-		style=[('go','yo'),('ro','bo'),('mo','co')]
+		style=itertools.repeat(('o','o'))
 		):
 	return [
 		plot_flag(itemid, data_groups, stats, d, style=s, range=range) 
