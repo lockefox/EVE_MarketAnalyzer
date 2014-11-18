@@ -67,6 +67,7 @@ class Query(object):
 		self.address = base_query
 		self.queryArgs = queryArgs
 		self.queryElements = {}
+		self.queryModifiers = []
 		self.IDcount = 0
 		self.startDate = startDate
 		self.startDatetime = datetime.strptime(self.startDate,"%Y-%m-%d")
@@ -265,7 +266,8 @@ class Query(object):
 		if mod_str in ("w-space","solo"):
 			self.IDcount += 1
 		
-		self.queryElements[str(mod_str)] = True
+		#self.queryElements[str(mod_str)] = True
+		self.queryModifiers.append(str(mod_str))
 		
 	def __iter__ (self):
 		query_results_JSON = []
@@ -312,7 +314,12 @@ class Query(object):
 				query_modifiers = "%s/%s" % (key,query_modifiers)	#fetch modifiers must be first
 			else:
 				query_modifiers = "%s%s/%s/" % (query_modifiers,key,value)
-				
+		
+		if len(self.queryModifiers) > 0:			
+			if len(self.queryModifiers) == 1:	#Probably a better way to handle trailing '/' in join()
+				query_modifiers = "%s%s/" % (query_modifiers,"/".join(self.queryModifiers))
+			else:
+				query_modifiers = "%s%s" % (query_modifiers,"/".join(self.queryModifiers))
 		return "%s%s" % (self.address,query_modifiers)
 	
 def latestKillID(kill_obj):
@@ -385,6 +392,7 @@ def fetchResult(zkb_url):
 	
 	#log query
 	for tries in range (0,retry_limit):
+		print 'sleepTime %s' % sleepTime
 		time.sleep(sleepTime)			#default wait between queries
 		time.sleep(default_sleep*tries)	#wait in case of retry
 		
@@ -411,6 +419,8 @@ def fetchResult(zkb_url):
 		
 		if snooze_routine == "HOURLY":
 			sleepTime = _hourlySnooze(http_header)
+		elif snooze_routine == "HOUR2":
+			sleepTime = _hour2Snooze(http_header)
 		elif snooze_routine == "POLITE":
 			sleepTime = _politeSnooze(http_header)
 		else:
@@ -469,7 +479,33 @@ def _snooze(http_header,multiplier=1):
 	else:
 		sleepTime = query_limit/(24*60*60)*multiplier
 		return sleepTime
+
+def _hour2Snooze(http_header):
+	snooze = default_sleep
+	progress = 0
+	try:
+		allowance = int(http_header["X-Bin-Max-Requests"])
 		
+	except KeyError as e:
+		print "WARNING: X-Bin-Max-Requests not defined in header"
+		return default_sleep
+	try:
+		progress = int(http_header["X-Bin-Request-Count"])
+	except KeyError as e:
+		print "WARNING: X-Bin-Request-Count not defined in header"
+	
+	if (progress/allowance) > 0.65:
+		snooze * 2
+	elif (progress/allowance) > 0.80:
+		snooze * 4
+	elif (progress/allowance) > 0.90:
+		snooze * 8
+	
+	if (allowance - progress) <= 10:	#emergency backoff
+		print 'critical allowance: %s' % (allowance - progress)
+		snooze = (3600/allowance) * 10
+	return snooze	
+
 def _snoozeSetter(http_header):
 	global query_limit,snooze_timer
 	
@@ -504,7 +540,8 @@ def _hourlySnooze(http_header):
 		progress = int(http_header["X-Bin-Request-Count"])
 	except KeyError as e:
 		print "WARNING: X-Bin-Request-Count not defined in header"
-	
+	print 3600 / allowance
+	print '%s:%s' % (progress, allowance)
 	snooze = (3600 / allowance) * query_mod
 	
 	if (progress/allowance) > 0.65:

@@ -309,8 +309,6 @@ def write_kills_to_SQL(zkb_return, db_cur, debug=False):
 			len(kill['attackers']))
 			
 		losses_list.append(losses_str)
-	parse_time = current_milli_time() - starttime
-	parse_snap = current_milli_time()
 	
 ####WRITE PARTICIPANTS TABLE####
 	if zkb_participants not in table_headers:
