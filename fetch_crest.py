@@ -68,9 +68,9 @@ def _validate_connection(
 		_initSQL(table)
 	db_conn.close()
 
-def fetch_markethistory(regions={}, debug=False, testserver=False):
+def fetch_markethistory(regions={}, thread_id=(0,1), debug=False, testserver=False):
 	if not regions:	raise ValueError("Argument region_list may not be empty.")
-
+	me, parts = thread_id
 	start = datetime.now()
 	last = datetime.now()
 
@@ -94,26 +94,34 @@ def fetch_markethistory(regions={}, debug=False, testserver=False):
 	price_history_query = 'SHOW COLUMNS FROM `%s`' % crest_pricehistory
 	price_history_headers = [column[0] for column in data_cur.execute(price_history_query).fetchall()]
 
+	nitems = len(item_list)
+	tail = nitems % parts
+	tail = tail if tail <= me else 0
+	my_count = nitems//parts + tail
 	def print_progress_thread():
 		timed_msg = fmt_name + " {finished}/{total} ({elapsed:.1f} m elapsed / {remaining:.1f} m remaining)"
-		return print_progress(timed_msg, last, start, count, len(item_list), debug)
+		return print_progress(timed_msg, last, start, i_finished, my_count, debug)
 
 	for regionID, regionName in regions.iteritems():
-		fmt_name = region_name_format.format( regionName + ":" )
-		crash_JSON = recover_on_restart(regionID)
-		
-		if len(crash_JSON['market_history'][regionID]) >= len(item_list):
+		fmt_name = region_name_format.format( regionName + ":", me )
+		crash_JSON = recover_on_restart(regionID, me)
+		if len(crash_JSON['market_history'][regionID]) >= my_count:
 			thread_print( fmt_name + ' Region Complete!' )
 			continue
-
+		i_finished = 0
+		i_skipped = 0
 		for count,itemID in enumerate(item_list):
+			if count % parts <> me: continue
 			if thread_exit_flag: 
 				thread_print( fmt_name + "Received exit signal." )
 				return
 			last = print_progress_thread()
 			query = 'market/%s/types/%s/history/' % (regionID,itemID)
 			if str(itemID) in crash_JSON['market_history'][regionID]:
-				thread_print( '%s:\tskip' % query )
+				i_finished = i_finished + 1
+				i_skipped = i_skipped + 1
+				if i_skipped % 10 == 0:
+					thread_print( '{0} skipped {1}'.format(fmt_name, i_skipped) )
 				continue #already processed data
 			
 			price_JSON = fetchURL_CREST(query, testserver, debug=False)
@@ -136,6 +144,7 @@ def fetch_markethistory(regions={}, debug=False, testserver=False):
 			
 			writeSQL(data_cur,crest_pricehistory,price_history_headers,data_to_write)
 			write_progress('market_history',regionID,itemID,crash_JSON)
+			i_finished = i_finished + 1
 	
 	data_conn.close() # should use a with maybe.
 
@@ -169,6 +178,7 @@ def writeSQL(db_cur, table, headers_list, data_list, hard_overwrite=True, debug=
 	db_cur.execute(insert_statement).commit()
 	
 def fetchURL_CREST(query, testserver=False, debug=False):
+	import random
 	#Returns parsed JSON of CREST query
 	real_query = ''
 	if testserver: real_query = '%s%s' % (crest_test_path, query)
@@ -190,7 +200,10 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 			headers = raw_response.headers
 			response = raw_response.read()
 		except urllib2.HTTPError as e:
-			thread_print( 'HTTPError:%s %s' % (e,real_query) )
+			if e.code == 503: 
+				threading._sleep(random.random()/8.0)
+			else:
+				thread_print( 'HTTPError:%s %s' % (e,real_query) )
 			fatal_error = False
 			continue
 		except urllib2.URLError as e:
@@ -237,9 +250,9 @@ def _date_convert(date_str):
 	new_time = datetime.strptime(date_str,'%Y-%m-%dT%H:%M:%S')
 	return new_time.strftime('%Y-%m-%d')
 
-def recover_on_restart(region_id):
-	fmt_name = region_name_format.format( threading.current_thread().name + ":" )
-	crash_filename = region_id + "_" + crash_filename_base
+def recover_on_restart(region_id, thread_id):
+	fmt_name = region_name_format.format( threading.current_thread().name + ":", thread_id )
+	crash_filename = "{0}-{1}_{2}".format(region_id, thread_id, crash_filename_base)
 	crash_JSON = {}
 	try:
 		with open(crash_filename,'r') as f:
@@ -269,22 +282,24 @@ def write_progress(subtable_name, key1, key2, crash_JSON):
 	with open(crash_JSON['filename'],'w') as crash_file:
 		json.dump(crash_JSON, crash_file)
 
-def launch_region_threads(regions={}):
+def launch_region_threads(regions={}, nthreads=1):
 	region_threads = []
 	for region_id, region_name in regions.iteritems():
-		kwargs = {
-			'regions': {region_id: region_name},
-			'debug': False,
-			'testserver': False
-			}
-		new_thread = threading.Thread(
-			name=region_name, 
-			kwargs=kwargs, 
-			target=fetch_markethistory
-			)
-		new_thread.daemon = False # So they can clean up properly
-		region_threads.append(new_thread)
-		new_thread.start()
+		for n in range(nthreads):
+			kwargs = {
+				'regions': {region_id: region_name},
+				'thread_id': (n, nthreads),
+				'debug': False,
+				'testserver': False
+				}
+			new_thread = threading.Thread(
+				name="{1}/{0:s}".format(region_name, n), 
+				kwargs=kwargs, 
+				target=fetch_markethistory
+				)
+			new_thread.daemon = False # So they can clean up properly
+			region_threads.append(new_thread)
+			new_thread.start()
 	return region_threads		
 
 def wait_region_threads(threads=[]):
@@ -314,8 +329,10 @@ def _optimize_database():
 	data_conn.close()
 
 def main():
+	max_threads = 20
+	threads_per_region = max_threads // len(trunc_region_list)
 	_validate_connection()
-	region_threads = launch_region_threads(trunc_region_list)
+	region_threads = launch_region_threads(trunc_region_list, threads_per_region)
 	wait_region_threads(region_threads)
 	_optimize_database()
 
