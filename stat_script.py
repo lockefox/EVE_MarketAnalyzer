@@ -260,6 +260,9 @@ def fetch_and_plot(data_struct, which_flags, TA_args = "", region=10000002):
 		importr('jsonlite')
 		importr('quantmod',robject_translations = {'skeleton.TA':'skeletonTA'})
 		importr('data.table')
+		importr('RODBC')
+		robjects.r("emd <- odbcConnect('evemarketdata')")
+
 		R_configured = True
 
 	print 'setting up dump path'
@@ -286,20 +289,36 @@ def fetch_and_plot(data_struct, which_flags, TA_args = "", region=10000002):
 				today=today,
 				img_type=img_type
 				)
+			if len(img_path) > 250:
+				extra = 250 - len(img_path)
+				keep = len(item_name) - extra
+				img_path = '{dump_path}/{item_name}_{region}_{today}.{img_type}'.format(
+					dump_path=dump_path,
+					region=region,
+					item_name=item_name[0:keep],
+					today=today,
+					img_type=img_type
+					)
+			if os.path.exists(img_path):
+				continue
+
 			plot_title = '%s %s' % (item_name, today)
 			print '\tplotting %s' % item_name
 			R_command_parametrized = '''
-				market.json <- fromJSON(readLines('{query_str}'))
-				market.data <- data.table(market.json$items)
-				market.data <- market.data[,list(Date = as.Date(date),
-												Volume= volume,
-												High  = highPrice,
-												Low   = lowPrice,
-												Close =avgPrice[-1],
-												Open  = avgPrice)]
-				n <- nrow(market.data)
-				market.data <- market.data[1:n-1,]
-				market.data.ts <- xts(market.data[,-1,with=F],order.by=market.data[,Date],period=7)
+			    market.query = 'SELECT price_date AS Date,
+									   volume AS Volume,
+									   highPrice AS High,
+									   lowPrice AS Low,
+									   avgPrice AS Close
+								FROM crest_markethistory
+								WHERE itemid={itemid} AND
+									  regionid={region}
+								ORDER BY Date DESC'
+				market.sqldata <- sqlQuery(emd, market.query)
+				n <- nrow(market.sqldata)
+				market.data <- data.table(market.sqldata[1:n-1,])
+				market.data$Open <- market.sqldata$Close[-1]
+				market.data.ts <- xts(market.data[,-1,with=F], order.by=market.data[,Date], period=7)
 				{img_type}('{img_path}',width = {img_X}, height = {img_Y})
 				chartSeries(market.data.ts,
 							name = '{plot_title}',
@@ -307,7 +326,8 @@ def fetch_and_plot(data_struct, which_flags, TA_args = "", region=10000002):
 							subset = '{default_subset}')
 				dev.off()'''
 			R_command = R_command_parametrized.format(
-				query_str=query_str,
+				itemid=itemid,
+				region=region,
 				img_type=img_type,
 				img_path=img_path,
 				img_X=img_X,
@@ -317,22 +337,12 @@ def fetch_and_plot(data_struct, which_flags, TA_args = "", region=10000002):
 				TA_args=TA_args,
 				default_subset=default_subset
 				)
+			try:
+				robjects.r(R_command)	
+			except:
+				pass
 
-
-			#robjects.r(R_command)	
-			#print R_command
-			for tries in range (0,retry_limit):
-				try:
-					robjects.r(R_command)
-				except rpy2.rinterface.RRuntimeError as e:
-					print '\t\tFailed pull %s' % e
-					continue
-				break
-			else:
-				print '\t\tskipping %s' % item_name
-				continue
-
-def main(region=10000002):
+def main(region):
 	report_sigmas = [
 		-2.5,
 		-2.0,
@@ -387,7 +397,6 @@ def main(region=10000002):
 			10, 
 			region=region
 			)
-	return
 	print "write flagged groups"
 	outfile = open(os.path.join(basedir,'sig_flags.txt'),'w')
 	for sig_level,itemids in itertools.chain(vol_flagged.iteritems(), price_flagged.iteritems()):
@@ -413,7 +422,7 @@ def main(region=10000002):
 	R_config_file = open(conf.get('STATS','R_config_file'),'r')
 	R_todo = json.load(R_config_file)
 	fetch_and_plot(R_todo['forced_plots'], 'forced', ";addRSI();addLines(h=30, on=4);addLines(h=70, on=4)",region=region)
-
+	robjects.r("close(emd)")
 
 def cuts_from_stats(stats, itemid, category):
 	s = stats.loc[itemid, category]
@@ -481,11 +490,18 @@ def hist_compare(itemid, desired=['price_delta_smm','price_delta_sma']):
 	)
 
 if __name__ == "__main__":
-	main()
-	
-	#for region in trunc_region_list.iterkeys():
-	#	print "Generating plots for {region}".format(region=region)
-	#	main(region=region) 
+	import multiprocessing
+	procs = []
+	regions = trunc_region_list.keys()
+	p = multiprocessing.Pool(len(regions))
+	p.map(main, regions)
 
 # 30633 = wrecked weapon subroutines
 # 12801 = Javelin M
+#trunc_region_list = {
+#	'10000002':'The Forge',
+#	'10000043':'Domain',
+#	'10000030':'Heimatar',
+#	'10000032':'Sinq Laison',
+#	'10000042':'Metropolis',
+#	}

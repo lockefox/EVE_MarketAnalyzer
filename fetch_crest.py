@@ -328,17 +328,18 @@ def _optimize_database():
 	data_cur.execute('''OPTIMIZE TABLE `%s`''' % crest_pricehistory).commit()
 	data_conn.close()
 
-def main():
-	max_threads = 20
-	threads_per_region = max_threads // len(trunc_region_list)
+def main(region):
 	_validate_connection()
-	region_threads = launch_region_threads(trunc_region_list, threads_per_region)
+	region_threads = launch_region_threads(region, 4)
 	wait_region_threads(region_threads)
-	_optimize_database()
 
 if __name__ == "__main__":
+	import multiprocessing
+	p = multiprocessing.Pool(len(trunc_region_list))
 	try:
-		main()
+		p.map(main, [dict([it]) for it in trunc_region_list.iteritems()])
+		_optimize_database()
+
 	except KeyboardInterrupt:
 		thread_exit_flag = True
 		raise

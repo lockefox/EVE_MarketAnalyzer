@@ -48,7 +48,7 @@ crest_serverprices  = conf.get('TABLES','crest_serverprices')
 
 def sanitize(filename):
 	def keep(c):
-		return c if (c.isalnum() or c in (' ','.','-')) else '|'
+		return c if (c.isalnum() or c in (' ','.','-')) else ''
 	return "".join(keep(c) for c in filename).strip()
 
 ####CONST STUFF####
