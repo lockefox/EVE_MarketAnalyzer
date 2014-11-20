@@ -210,8 +210,8 @@ def build_commit_str_participants(kill_entry, base_kill_dict, isVictim = False):
 	totalValue = base_kill_dict['totalValue']
 	
 	#probably better way to build this#
-	return_str = '''(%s,%s,'%s',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''' %\
-		(killID,\
+	return_str = '''(%s,%s,'%s',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''' %(\
+		killID,\
 		solarSystemID,\
 		kill_time,\
 		isVictim_val,\
@@ -224,28 +224,79 @@ def build_commit_str_participants(kill_entry, base_kill_dict, isVictim = False):
 		totalValue)
 	
 	return return_str
+
+def build_commit_str_fits(item_list, base_kill_dict):
+	killID      = base_kill_dict['killID']
+	shipTypeID  = base_kill_dict['shipTypeID']
+	
+	typeID       = item_list['typeID']
+	flag         = item_list['flag']
+	qtyDropped   = item_list['qtyDropped']
+	qtyDestroyed = item_list['qtyDestroyed']
+	singleton    = item_list['singleton']
+	
+	return_str = '''(%s,%s,%s,%s,%s,%s,%s)''' % (\
+		killID,\
+		shipTypeID,\
+		flag,\
+		qtyDropped,\
+		qtyDestroyed,\
+		singleton)
 		
+	return return_str
+	
 def write_kills_to_SQL(zkb_return):
-	fits_list = []	#list of commit strs?
-	participants_list = []
+	fits_list = []	#all items lost in fights
+	participants_list = [] #all participants (victims and killers)
+	losses_list = []	#truncated list of just victims and destroyed 
 	
 	for kill in zkb_return:
 		base_kill_dict = {}
 		
-		base_kill_dict['kill_id ']      = int(kill['killID'])
-		base_kill_dict['solarSystemId'] = int(kill['solarSystemID'])
-		base_kill_dict['kill_time']     = kill['killTime']	#convert to datetime for writing to db?
-		base_kill_dict['totalValue']    = int(kill['zkb']['totalValue']) #MAY NEED EXCEPTION
-		
+		base_kill_dict['kill_id ']       = int(kill['killID'])
+		base_kill_dict['solarSystemId']  = int(kill['solarSystemID'])
+		base_kill_dict['kill_time']      = kill['killTime']	#convert to datetime for writing to db?
+		base_kill_dict['totalValue']     = 'NULL'
+		if 'totalValue' in kill['zkb']:
+			if int(kill['zkb']['totalValue']) != 0:
+				base_kill_dict['totalValue'] = int(kill['zkb']['totalValue']) 
+				
+		base_kill_dict['shipTypeID']     = int(kill['victim']['shipTypeID'])
 		##PARSE VICTIM##
-		tmp_commit_str = build_commit_str_participants(kill, base_kill_dict, True)
+		tmp_commit_str = build_commit_str_participants(kill['victim'], base_kill_dict, True)
 		participants_list.append(tmp_commit_str)
 		
-		for participant in attackers:
+		for participant in kill['attackers']:	#walk through participants to get kill stats
 			tmp_commit_str = build_commit_str_participants(participant, base_kill_dict, False)
 			participants_list.append(tmp_commit_str)
 		
+		for item_list in kill['items']:
+			tmp_commit_str = build_commit_str_fits(item_list, base_kill_dict)
+			fits_list.append(tmp_commit_str)
 		
+		victim_allianceID = 'NULL'
+		if int(kill['victim']['allianceID']) != 0:
+			victim_allianceID = int(kill['victim']['allianceID'])
+			
+		victim_factionID = 'NULL'
+		if int(kill['victim']['factionID']) != 0:
+			victim_factionID = int(kill['victim']['factionID'])
+			
+		losses_str = '''(%s,%s,'%s',%s,%s,%s,%s,%s,%s,%s,%s)'''%(\
+			base_kill_dict['kill_id '],\
+			base_kill_dict['solarSystemId'],\
+			base_kill_dict['kill_time'],\
+			base_kill_dict['shipTypeID'],\
+			kill['victim']['damageTaken'],\
+			kill['victim']['characterID'],\
+			kill['victim']['corporationID'],\
+			victim_allianceID,\
+			victim_factionID,\
+			base_kill_dict['totalValue'],
+			len(kill['attackers']))
+			
+		losses_list.append(losses_str)
+	
 def main():
 	_validate_connection()
 	#TODO: test if zkb API is up

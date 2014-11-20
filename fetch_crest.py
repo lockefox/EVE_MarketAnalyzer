@@ -339,7 +339,6 @@ if __name__ == "__main__":
 	try:
 		p.map(main, [dict([it]) for it in trunc_region_list.iteritems()])
 		_optimize_database()
-
 	except KeyboardInterrupt:
 		thread_exit_flag = True
 		raise
