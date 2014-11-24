@@ -128,4 +128,4 @@ trunc_region_list = {
 	}
 
 region_name_maxlen = max( len( r ) for r in region_list.values() ) + 1
-region_name_format = "{:" + str(region_name_maxlen) + "s}"
+region_name_format = "{1}/{0:" + str(region_name_maxlen) + "s}"
