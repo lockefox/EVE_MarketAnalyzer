@@ -401,9 +401,10 @@ def main():
 			print '\t%s' % QueryObj
 			write_kills_to_SQL(kill_list,data_cur, ProgressObj,False)
 			ProgressObj.update_query(str(QueryObj))
-			
+			ProgressObj.dump_crash_log()
 		ProgressObj.group_complete(group)	#TODO: will need to parse out CSV to list?
 		ProgressObj.latestKillID = 0
+		ProgressObj.dump_crash_log()
 		#sys.exit(1)
 if __name__ == "__main__":
 	main()
