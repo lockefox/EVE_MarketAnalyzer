@@ -495,10 +495,13 @@ def _hour2Snooze(http_header):
 		print "WARNING: X-Bin-Request-Count not defined in header"
 	
 	if (progress/allowance) > 0.65:
+		if snooze == 0: snooze += 1
 		snooze * 2
 	elif (progress/allowance) > 0.80:
+		if snooze == 0: snooze += 1
 		snooze * 4
 	elif (progress/allowance) > 0.90:
+		if snooze == 0: snooze += 1
 		snooze * 8
 	
 	if (allowance - progress) <= 10:	#emergency backoff

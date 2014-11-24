@@ -45,6 +45,7 @@ class Progress(object):
 		self.groups_completed = []
 		self.groups_remaining = []
 		self.mode = mode
+		self.latestKillID = 0
 		
 		self.parse_crash_log()	#init object automatically
 		
@@ -87,10 +88,12 @@ class Progress(object):
 		self.groups_completed = dump_object['groups_completed']
 		self.groups_remaining = dump_object['groups_remaining']
 		self.latest_query = dump_object['latest_query']
+		self.latestKillID = min(dump_object['killIDs'])
 
 	def addKillID(self,newkillID):
 		self.killIDs.append(int(newkillID))
-	
+		self.latestKillID = newkillID
+		
 	def update_query(self,query_str):
 		self.latest_query = query_str
 		
@@ -257,7 +260,7 @@ def fetch_headers(table_name, db_cur):
 	table_header_str = table_header_str.rstrip(',')
 	table_headers[table_name] = table_header_str
 	
-def write_kills_to_SQL(zkb_return, db_cur, debug=False):	
+def write_kills_to_SQL(zkb_return, db_cur, ProgressObj, debug=False):	
 	fits_list = []	#all items lost in fights
 	participants_list = [] #all participants (victims and killers)
 	losses_list = []	#truncated list of just victims and destroyed 
@@ -269,6 +272,9 @@ def write_kills_to_SQL(zkb_return, db_cur, debug=False):
 		base_kill_dict['solarSystemID']  = int(kill['solarSystemID'])
 		base_kill_dict['kill_time']      = kill['killTime']	#convert to datetime for writing to db?
 		base_kill_dict['totalValue']     = 'NULL'
+		
+		ProgressObj.addKillID(base_kill_dict['kill_id'])
+		
 		if 'zkb' in kill:
 			if 'totalValue' in kill['zkb']:
 				if int(float(kill['zkb']['totalValue'])) != 0:
@@ -386,13 +392,18 @@ def main():
 			print 'Unsupported fetch method: %s' % method.upper()
 			sys.exit(2)
 		QueryObj.api_only
+	
+		if ProgressObj.latestKillID != 0:	#recover progress
+			QueryObj.beforeKillID(ProgressObj.latestKillID)
+			
 		print 'Fetching %s' % QueryObj
 		for kill_list in QueryObj:
 			print '\t%s' % QueryObj
-			write_kills_to_SQL(kill_list,data_cur,False)
-			#TODO: write killid list to ProgressObj
+			write_kills_to_SQL(kill_list,data_cur, ProgressObj,False)
+			ProgressObj.update_query(str(QueryObj))
 			
 		ProgressObj.group_complete(group)	#TODO: will need to parse out CSV to list?
+		ProgressObj.latestKillID = 0
 		#sys.exit(1)
 if __name__ == "__main__":
 	main()
