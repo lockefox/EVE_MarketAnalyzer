@@ -394,7 +394,7 @@ def main(region=10000002):
 			10, 
 			region=region
 			)
-	return
+	#return
 	print "write flagged groups"
 	outfile = open(os.path.join(basedir,'sig_flags.txt'),'w')
 	for sig_level,itemids in itertools.chain(vol_flagged.iteritems(), price_flagged.iteritems()):
