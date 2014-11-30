@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 #!/Python27/python.exe
 
 import sys, gzip, StringIO, sys, math, os, getopt, time, json, socket
