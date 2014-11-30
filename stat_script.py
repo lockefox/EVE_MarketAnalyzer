@@ -22,7 +22,8 @@ global V
 
 localdir = "C:\Users\John\Dropbox\EMA"
 
-basedir = localdir if os.path.exists(localdir) else ""
+basedir = localdir if os.path.exists(localdir) else "."
+plot_location_template = "{basedir}/{plots}/{date}/{flag_group}" # also available: {itemid}, {regionid}
 
 class AttrLogger(object):
 	def __init__(self):
@@ -253,8 +254,8 @@ def sigma_report(
 
 	return vol_flagged, price_flagged
 
-def fetch_and_plot(data_struct, which_flags, TA_args = "", region=10000002):
-	global R_configured, basedir
+def fetch_and_plot(data_struct, flag_group, flag_details, TA_args = "", region=10000002):
+	global R_configured, basedir, plot_location_template
 	if not R_configured:
 		print 'Setting up R libraries'
 		importr('jsonlite')
@@ -266,12 +267,18 @@ def fetch_and_plot(data_struct, which_flags, TA_args = "", region=10000002):
 		R_configured = True
 
 	print 'setting up dump path'
-	out_dir = os.path.join(basedir, 'plots', today, which_flags)
+	out_dir = plot_location_template.format(
+		basedir=basedir, 
+		plots='plots', 
+		date=today, 
+		flag_group=flag_group,
+		regionid=region
+		)
 	if not os.path.exists(out_dir):
 		os.makedirs(out_dir)
 	
 	for group, item_list in data_struct.iteritems():
-		dump_path = os.path.join(basedir, 'plots', today, which_flags, group).replace("\\","/")
+		dump_path = os.path.join(basedir, 'plots', today, flag_group, group).replace("\\","/")
 		print dump_path
 		if not os.path.exists(dump_path):
 			os.makedirs(dump_path)
