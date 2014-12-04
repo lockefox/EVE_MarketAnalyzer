@@ -91,7 +91,7 @@ def fetch_markethistory(regions={}, thread_id=(0,1), debug=False, testserver=Fal
 
 	item_list = [row[0] for row in sde_cur.execute(items_query).fetchall()]
 	
-	price_history_query = 'SHOW COLUMNS FROM `%s`' % crest_pricehistory
+	price_history_query = '''SHOW COLUMNS FROM `%s`''' % crest_pricehistory
 	price_history_headers = [column[0] for column in data_cur.execute(price_history_query).fetchall()]
 
 	nitems = len(item_list)
@@ -111,6 +111,7 @@ def fetch_markethistory(regions={}, thread_id=(0,1), debug=False, testserver=Fal
 		i_finished = 0
 		i_skipped = 0
 		for count,itemID in enumerate(item_list):
+			if count % parts <> me: continue
 			if thread_exit_flag: 
 				thread_print( fmt_name + "Received exit signal." )
 				return
