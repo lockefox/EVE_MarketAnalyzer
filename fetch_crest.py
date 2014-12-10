@@ -91,7 +91,7 @@ def fetch_markethistory(regions={}, thread_id=(0,1), debug=False, testserver=Fal
 
 	item_list = [row[0] for row in sde_cur.execute(items_query).fetchall()]
 	
-	price_history_query = 'SHOW COLUMNS FROM `%s`' % crest_pricehistory
+	price_history_query = '''SHOW COLUMNS FROM `%s`''' % crest_pricehistory
 	price_history_headers = [column[0] for column in data_cur.execute(price_history_query).fetchall()]
 
 	nitems = len(item_list)
@@ -328,17 +328,17 @@ def _optimize_database():
 	data_cur.execute('''OPTIMIZE TABLE `%s`''' % crest_pricehistory).commit()
 	data_conn.close()
 
-def main(region):
+def main():
+	max_threads = 20
+	threads_per_region = max_threads // len(trunc_region_list)
 	_validate_connection()
-	region_threads = launch_region_threads(region, 4)
+	region_threads = launch_region_threads(trunc_region_list, threads_per_region)
 	wait_region_threads(region_threads)
+	_optimize_database()
 
 if __name__ == "__main__":
-	import multiprocessing
-	p = multiprocessing.Pool(len(trunc_region_list))
 	try:
-		p.map(main, [dict([it]) for it in trunc_region_list.iteritems()])
-		_optimize_database()
+		main()
 	except KeyboardInterrupt:
 		thread_exit_flag = True
 		raise
