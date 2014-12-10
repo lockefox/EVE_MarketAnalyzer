@@ -48,7 +48,7 @@ crest_serverprices  = conf.get('TABLES','crest_serverprices')
 
 def sanitize(filename):
 	def keep(c):
-		return c if (c.isalnum() or c in (' ','.','-')) else '|'
+		return c if (c.isalnum() or c in (' ','.','-')) else ''
 	return "".join(keep(c) for c in filename).strip()
 
 ####CONST STUFF####
@@ -121,10 +121,11 @@ region_list = {
 
 trunc_region_list = {
 	'10000002':'The Forge',
-	#'10000043':'Domain',
-	#'10000030':'Heimatar',
-	#'10000032':'Sinq Laison',
-	#'10000042':'Metropolis',
+	'10000043':'Domain',
+	'10000030':'Heimatar',
+	'10000032':'Sinq Laison',
+	'10000042':'Metropolis',
+	'11000031':'G-R00031'
 	}
 
 region_name_maxlen = max( len( r ) for r in region_list.values() ) + 1
