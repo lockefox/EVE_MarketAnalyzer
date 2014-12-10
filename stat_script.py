@@ -385,6 +385,14 @@ def main(region):
 		index_col=['itemid']
 		)
 	V.convert = convert
+	
+	print 'Plotting Forced Group'
+	R_config_file = open(conf.get('STATS','R_config_file'),'r')
+	R_todo = json.load(R_config_file)
+	fetch_and_plot(R_todo['forced_plots'], 'forced', ";addRSI();addLines(h=30, on=4);addLines(h=70, on=4)",region=region)
+	robjects.r("close(emd)")
+	sys.exit(0)
+	
 	market_data_groups = fetch_market_data(region=region)
 	V.market_data_groups = market_data_groups
 	market_sigmas = crunch_market_stats(market_data_groups, report_sigmas, filter_sigmas, region=region)
