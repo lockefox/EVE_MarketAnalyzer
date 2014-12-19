@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 #!/Python27/python.exe
 
 import sys, gzip, StringIO, sys, math, os, getopt, time, json, socket
@@ -18,6 +17,9 @@ import pandas.io.sql as psql
 from scipy.stats import norm
 
 from ema_config import *
+
+MACD_SHORT = 12
+MACD_LONG = 26
 
 global V
 
@@ -86,31 +88,49 @@ def fetch_market_data(days=366, window=15, region=10000002, debug=global_debug):
 
 	raw_data_filled.fillna({'volume':0}, inplace=True)
 
-	raw_data_filled['price_delta_sma'] = \
+	raw_data_filled['avgprice_int'] = \
 		raw_data_filled \
 		.groupby('itemid') \
 		.avgprice \
 		.apply(
-			lambda x: x - pd.rolling_mean(
+			lambda x: 
 				x.interpolate()
-				 .fillna(method='bfill'),
-				window
-				)
-			)
+				 .fillna(method='bfill')
+		 )
+
+	raw_data_filled['price_delta_sma'] = \
+		raw_data_filled \
+		.groupby('itemid') \
+		.avgprice_int \
+		.apply(lambda x: x - pd.rolling_mean(x, window))
 
 	# raw_data_filled['price_delta_sma2'] = raw_data_filled['price_delta_sma'] ** 2
 
 	raw_data_filled['price_delta_smm'] = \
 		raw_data_filled \
 		.groupby('itemid') \
-		.avgprice \
-		.apply(
-			lambda x: x - pd.rolling_median(
-				x.interpolate()
-				 .fillna(method='bfill'),
-				window
-				)
-			)
+		.avgprice_int \
+		.apply(lambda x: x - pd.rolling_median(x, window))
+
+	global MACD_SHORT, MACD_LONG
+	def macd(x, short=MACD_SHORT, long=MACD_LONG):
+		short_ema = pd.ewma(x, span=short)
+		long_ema = pd.ewma(x, span=long)
+		return short_ema - long_ema
+
+	raw_data_filled['macd'] = \
+		raw_data_filled \
+		.groupby('itemid') \
+		.avgprice_int \
+		.apply(macd)
+
+	raw_data_filled['macd_trend'] = \
+		raw_data_filled \
+		.groupby('itemid') \
+		.macd \
+		.apply(lambda x: pd.ewma(x, span=9))
+
+	raw_data_filled['macd_flags'] = raw_data_filled.macd - raw_data_filled.macd_trend
 
 	V.raw_data_filled = raw_data_filled
 	# raw_data_filled['price_delta_smm2'] = raw_data_filled['price_delta_smm'] ** 2 
@@ -395,6 +415,7 @@ def main(region):
 	V.convert = convert
 	market_data_groups = fetch_market_data(region=region)
 	V.market_data_groups = market_data_groups
+	return
 	market_sigmas = crunch_market_stats(market_data_groups, report_sigmas, filter_sigmas, region=region)
 	V.market_sigmas = market_sigmas
 	data_groups = market_data_groups
@@ -498,11 +519,13 @@ def hist_compare(itemid, desired=['price_delta_smm','price_delta_sma']):
 	)
 
 if __name__ == "__main__":
-	import multiprocessing
-	procs = []
-	regions = trunc_region_list.keys()
-	p = multiprocessing.Pool(len(regions))
-	p.map(main, regions)
+	main('10000002')
+	if False:
+		import multiprocessing
+		procs = []
+		regions = trunc_region_list.keys()
+		p = multiprocessing.Pool(len(regions))
+		p.map(main, regions)
 
 # 30633 = wrecked weapon subroutines
 # 12801 = Javelin M
