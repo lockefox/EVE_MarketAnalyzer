@@ -33,8 +33,10 @@
     <Compile Include="ema_config.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="fetch_zkb.py" />
     <Compile Include="rpy_test.py" />
     <Compile Include="stat_script.py" />
+    <Compile Include="zkb.py" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="SQL" />
