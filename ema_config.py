@@ -125,6 +125,7 @@ trunc_region_list = {
 	'10000030':'Heimatar',
 	'10000032':'Sinq Laison',
 	'10000042':'Metropolis',
+	'11000031':'G-R00031'
 	}
 
 region_name_maxlen = max( len( r ) for r in region_list.values() ) + 1
