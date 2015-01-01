@@ -9,10 +9,10 @@ class TooFewRequiredParameters(QueryException):
 		req_list = '\n\t'.join(required)
 		QueryException.__init__(self, "Query %s must include one of:\n\t%s" % (query, req_list))
 
-class InvalidQueryParameter(QueryException):
+class InvalidQueryParameter(AttributeError):
 	def __init__(self, param, valid_params):
 		param_list = '\n\t'.join(valid_params)
-		QueryException.__init__(self, "'%s'. Valid parameters:\n\t%s" % (param, param_list))
+		AttributeError.__init__(self, "'%s'. Valid query parameters are:\n\t%s" % (param, param_list))
 
 class TooManyIDsRequested(QueryException):
 	def __init__(self, modifier, limit):
