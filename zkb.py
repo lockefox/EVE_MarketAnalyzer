@@ -1,10 +1,15 @@
 #!/Python27/python.exe
-
+from __future__ import division
 import sys, gzip, StringIO, sys, math, os, getopt, time, json, socket
+import requests
 import urllib2
 # import MySQLdb
 import ConfigParser
 from datetime import datetime
+import itertools
+flatten = itertools.chain.from_iterable
+
+from zkb_exceptions import *
 
 try:
 	import stomp	#for live connections later
@@ -15,7 +20,7 @@ except ImportError:
 conf = ConfigParser.ConfigParser()
 conf.read(["init.ini", "init_local.ini"])
 
-base_query = conf.get("ZKB","base_query")
+zkb_base_query = conf.get("ZKB","base_query")
 query_limit = int(conf.get("ZKB","query_limit"))
 subquery_limit = int(conf.get("ZKB","subquery_limit"))
 retry_limit = int(conf.get("ZKB","retry_limit"))
@@ -28,7 +33,72 @@ sleepTime = query_limit/(24*60*60)
 
 log = open (logfile, 'a+')
 
-valid_modifiers = (
+gzip_override=0
+
+snooze_routine = conf.get("ZKB","snooze_routine")
+query_mod = float(conf.get("ZKB","query_mod"))
+
+acceptable_date_formats = ("%Y-%m-%d", "%Y-%m-%d %H:%M", "%Y%m%d%H%M")
+def dateValidator(value, format="%Y%m%d%H%M"):
+	if value is None: return None
+	for f in acceptable_date_formats:
+		try:
+			date = time.strptime(value, f)
+		except ValueError:
+			pass
+		else:
+			return time.strftime(format, date)
+	raise InvalidDateFormat(value, acceptable_date_formats)
+
+def singletonValidator(value):
+	if value is None: return None
+	if (isinstance(value, str) and value.isdigit()) or isinstance(value, int):
+		return str(value)
+	raise InvalidQueryValue(value, 'Value must be int or convertible to int.')
+
+def idValidator(value):
+	if value is None: return None
+	if isinstance(value, int):
+		vlist = [value]
+	elif isinstance(value, str):
+		vlist = value.split(',')
+	elif isinstance(value, list):
+		vlist = value
+	if len(vlist) > subquery_limit: raise TooManyIDsRequested(value, subquery_limit)
+	return ','.join(vv for vv in [singletonValidator(v) for v in vlist] if vv is not None)
+
+def modValidator(value): return True if value else None
+
+def orderValidator(value):
+	if value is None: return None
+	value = value.lower()
+	if value in ('asc', 'desc'):
+		return value
+	raise InvalidQueryValue(value, "must be 'asc' or 'desc'")
+
+def secondsValidator(value):
+	if value is None: return None
+	secs = int(value)
+	if secs <= (86400 * 7): 
+		return str(secs)
+	raise InvalidQueryValue(value, "pastSeconds is limited to a max of 7 days.")
+
+
+zkb_required = (
+	"characterID", 
+	"corporationID", 
+	"allianceID", 
+	"factionID", 
+	"shipTypeID", 
+	"groupID", 
+	"solarSystemID", 
+	"solo", 
+	"w-space", 
+	"warID", 
+	"killID"
+)
+
+zkb_modifiers = (
 	"kills",
 	"losses",
 	"w-space",
@@ -36,248 +106,148 @@ valid_modifiers = (
 	"no-items",
 	"no-attackers",
 	"api-only",
-	"xml")
+	"xml",
+	"pretty",
+	"finalblow-only"
+)
 
-gzip_override=0
+zkb_date_params = (
+	"startTime",
+	"endTime"
+)
 
-snooze_routine = conf.get("ZKB","snooze_routine")
-query_mod = float(conf.get("ZKB","query_mod"))
+zkb_singleton_params = (
+	'limit',
+	'page',
+	'year',
+	'month',
+	'week',
+	'beforeKillID',
+	'afterKillID',
+	'killID',
+	'warID',
+	'iskValue'
+)
 
-class QueryException(Exception):
-	def __init__ (self,code):
-		self.code = code
-	def __str__ (self):
-		if self.code == -1:
-			return "ZKB requires at least 2 '*ID' identifiers"
-		elif self.code == -2:
-			mod_list = '\n'.join(valid_modifier)
-			return "Invalid query modifier.  Valid Modifiers:\n%s" % mod_list
-		elif self.code == -3:
-			return "Invalid order modifier.  'asc' or 'desc' only"
-		elif self.code == -4:
-			return "Invalid ID modifier.  Query limit = %s" % subquery_limit
-		elif self.code == -5:
-			return "Invalid query modifier type.  Modifier must be base type int"
-		else:
-			return "Useless generic Exception"
+zkb_id_params = (
+	'characterID',
+	'corporationID',
+	'allianceID',
+	'factionID',
+	'shipTypeID',
+	'groupID',
+	'solarSystemID',
+	'regionID'
+)
+
+zkb_unique_params = (
+	('orderDirection', orderValidator),
+	('pastSeconds', secondsValidator)
+)
+
+zkb_params = (
+	(zkb_modifiers, modValidator),
+	(zkb_date_params, dateValidator),
+	(zkb_singleton_params, singletonValidator),
+	(zkb_id_params, idValidator)
+)
+
+zkb_synonyms = { 
+	'ship': 'shipTypeID',
+	'shipID': 'shipTypeID',
+	'shipType': 'shipTypeID',
+	'character': 'characterID',
+	'corporation': 'corporationID',
+	'alliance': 'allianceID',
+	'faction': 'factionID',
+	'group': 'groupID',
+	'system': 'solarSystemID',
+	'systemID': 'solarSystemID',
+	'solarSystem': 'solarSystemID',
+	'region': 'regionID',
+	'startDate': 'startTime',
+	'endDate': 'endTime',
+	'war': 'warID'
+}
+
+zkb_rest_parameters = dict(
+	itertools.chain(
+		flatten(zip(p, itertools.repeat(v)) for p, v in zkb_params), 
+		zkb_unique_params
+	)
+)
+
+class ZKBQuery(object):
+	Base = zkb_base_query # the URI root
+	Synonyms = zkb_synonyms # a dict of 'alternateName': 'canonicalName' pairs
+	Parameters = zkb_rest_parameters # a dict of 'parameterName': validatorFunction pairs
+	Modifiers = zkb_modifiers # a list of query parameters that don't take a value
+	Required = zkb_required # a list of query parameters which you must have at least one of (not all are required)
 			
-class Query(object):
-	__initialized = False
 	def __init__ (self, startDate, queryArgs=""):
-		self.address = base_query
-		self.queryArgs = queryArgs
 		self.queryElements = {}
-		self.queryModifiers = []
-		self.IDcount = 0
-		self.startDate = startDate
+		self.queryModifiers = set()
+		self.startDate = dateValidator(startDate, "%Y-%m-%d")
 		self.startDatetime = datetime.strptime(self.startDate,"%Y-%m-%d")
-		if queryArgs != "":
-			self.IDcount +=2
-			#do load into queryElements
-		self.__initialized == True
+		self.response = None
+		self.parseQueryArgs(queryArgs)
 		
-	def fetch(self):
-		return fetchResults(self)
+	def parseQueryArgs(self, queryArgs):
+		param = None
+		for item in queryArgs.split('/'):
+			if param is not None:
+				self.validateAndSet(param, item)
+				param = None
+			elif item in self.Modifiers:
+				self.validateAndSet(item, True)
+			elif item:
+				param = item
 	
-	def fetch_one(self):
-		return fetchResult(str(self))
-		
-	def parseQueryArgs(self,queryArgs):	#Would prefer to also do internal validation
-		arg_list = queryArgs.split('/')
-		arg_obj = {}
-		previous_item = ""
-		for item in arg_list:
-			if item in valid_modifiers:
-				self.queryElements[item] = True
-				continue
-			split_list = item.split(',')
-			if item.isdigit():
-				queryElements[previous_item]=item
-			elif len(split_list)>1:
-				queryElements[previous_item]=item
-				
-			previous_item = item
-			
-	def orderDirection(self,dir):
-		dirLower = dir.lower()
-		if dirLower not in ("asc","desc"):
-			raise QueryException(-3)
-		
-		self.queryElements["orderDirection"] = dirLower
-		
-	def startTime(self,datevalue):
-		validTime = False
-		try:
-			date = time.strptime(datevalue,"%Y-%m-%d")
-		except ValueError as e:
-			try:
-				date = time.strptime(datevalue,"%Y-%m-%d %H:%M")
-			except ValueError as e2:
-				try:
-					date = time.strptime(datevalue,"%Y%m%d%H%M")
-					validTime = True
-				except ValueError as e3:
-					raise e3
-					
-		date_str = ""
-		if validTime:
-			date_str = datevalue
+	def validateAndSet(self, name="", value=None):
+		name = name.replace('_', '-')
+		if name in self.Synonyms: name = self.Synonyms[name]
+		if name not in self.Parameters:
+			raise InvalidQueryParameter(name, sorted(self.Parameters.keys() + self.Synonyms.keys()))
+		validator = self.Parameters[name]
+		value = validator(value)
+		if name in self.Modifiers:
+			if value:
+				self.queryModifiers.add(name)
+			elif name in self.queryModifiers:
+				self.queryModifiers.remove(name)
 		else:
-			date_str = dateConv(date)
-		self.queryElements["startTime"] = date_str
+			if value is not None:
+				self.queryElements[name] = value
+			elif name in self.queryElements:
+				self.queryElements.pop(name)
+		return self
 
-	def endTime(self,datevalue):
-		validTime = False
-		try:
-			date = time.strptime(datevalue,"%Y-%m-%d")
-		except ValueError as e:
-			try:
-				date = time.strptime(datevalue,"%Y-%m-%d %H:%M")
-			except ValueError as e2:
-				try:
-					date = time.strptime(datevalue,"%Y%m%d%H%M")
-					validTime = True
-				except ValueError as e3:
-					raise e3
-				
-		date_str = ""
-		if validTime:
-			date_str = datevalue
-		else:
-			date_str = dateConv(date)
-			
-		self.queryElements["endTime"] = date_str
-				
-	def dateConv (self,date):
-		date_str = date.strftime("%Y%m%d%H%M")
-		return date_str
-	
-	def limit (self,limit):
-		if self.singletonValidator(limit):
-			self.queryElements["limit"] = limit
-		else:
-			raise QueryException(-5)
-			
-	def page (self,page):
-		if self.singletonValidator(page):
-			self.queryElements["page"] = page
-		else:
-			raise QueryException(-5)
-	
-	def year (self,year):
-		if self.singletonValidator(year):
-			self.queryElements["year"] = year
-		else:
-			raise QueryException(-5)
-			
-	def month(self,month):
-		if self.singletonValidator(month):
-			self.queryElements["month"] = month
-		else:
-			raise QueryException(-5)
-			
-	def week (self,week):
-		if self.singletonValidator(week):
-			self.queryElements["week"] = week
-		else:
-			raise QueryException(-5)
-			
-	def beforeKillID (self,killID):
-		self.IDcount +=1	
-		self.queryElements["beforeKillID"] = self.idValidator(killID)
+	def __getattr__(self, name):
+		return lambda v=True: self.validateAndSet(name=name, value=v)
 		
-	def afterKillID (self,killID):
-		self.IDcount +=1	
-		self.queryElements["afterKillID"] = self.idValidator(killID)
-		
-	def pastSeconds (self,seconds):
-		self.IDcount +=1	
-		self.queryElements["pastSeconds"] = self.idValidator(seconds)
-		
-	def characterID (self,characterID):
-		self.IDcount +=2	
-		self.queryElements["characterID"] = self.idValidator(characterID)
-		
-	def corpoartionID (self,corporationID):
-		self.IDcount +=2	
-		self.queryElements["corpoartionID"] = self.idValidator(corporationID)
-		
-	def allianceID (self,allianceID):
-		self.IDcount +=2	
-		self.queryElements["allianceID"] = self.idValidator(allianceID)
-		
-	def factionID (self,factionID):
-		self.IDcount +=1	
-		self.queryElements["factionID"] = self.idValidator(factionID)
-		
-	def shipTypeID (self,shipTypeID):
-		self.IDcount +=1	
-		self.queryElements["shipTypeID"] = self.idValidator(shipTypeID)
-		
-	def groupID (self,groupID):
-		self.IDcount +=1	
-		self.queryElements["groupID"] = self.idValidator(groupID)
-		
-	def solarSystemID (self,solarSystemID):
-		self.IDcount +=1
-		self.queryElements["solarSystemID"] = self.idValidator(solarSystemID)
-		
-	def regionID (self,regionID):
-		self.IDcount +=1
-		self.queryElements["regionID"] = self.idValidator(regionID)
-		
-	def singletonValidator (self,value):
-		valid = False
-		if isinstance(value,str):
-			if value.isdigit():
-				valid = True
-		elif isinstance(value,int):
-			valid = True
-		return valid
-		
-	def idValidator (self,value):
-		returnstr = ""
-		if isinstance(value,str):
-			tmp_list = value.split(',')
-			valid_list = True
-			for individual in tmp_list:
-				if self.singletonValidator(individual) == False:
-					raise QueryException(-5)
-					
-			returnstr = value
-		elif isinstance(value,int):
-			returnstr = str(value)
-			
-		elif type(value) is list:
-			valid_list = True
-			for individual in value:
-				if self.singletonValidator(individual) == False:
-					raise QueryException(-5)
-					
-			returnstr = ','.join(str(x) for x in value)
-		return returnstr
-		
-	def __getattr__ (self,name):	#for modifiers
-		mod_str = name.replace('_','-')
-		if mod_str not in valid_modifiers:
-			raise QueryException(-2)
-		
-		
-		if mod_str in ("w-space","solo"):
-			self.IDcount += 1
-		
-		#self.queryElements[str(mod_str)] = True
-		self.queryModifiers.append(str(mod_str))
-		
+	def __str__(self):
+		query = [self.Base]
+		query += sorted(self.queryModifiers)
+		query += sorted("{0}/{1}".format(p, v) for p, v in self.queryElements.iteritems() if v is not None)
+		query.append("")
+		return "/".join(query)
+
+	def is_valid(self):
+		params = set(self.queryElements.keys()) | self.queryModifiers
+		required = set(self.Required)
+		return len(params & required) > 0
+
+	def get_query(self):
+		if self.is_valid():
+			return str(self)
+		raise TooFewRequiredParameters(str(self), self.Required)
+
 	def __iter__ (self):
 		query_results_JSON = []
-		try:
-			self.queryElements["beforeKillID"]
-		except KeyError, E:
-			self.queryElements["beforeKillID"] = fetchLatestKillID(self.startDate)
-		
-		query_complete = False
-		while query_complete == False:
+		if 'beforeKillID' not in self.queryElements:
+			self.beforeKillID(fetchLatestKillID(self.startDate))
+
+		while True:
 			result_JSON = []
 			try:
 				single_query_JSON = fetchResult(str(self))
@@ -290,9 +260,8 @@ class Query(object):
 			beforeKill = int(earliestKillID(single_query_JSON))
 			
 			if len(single_query_JSON) == 0:
-				query_complete = True
-				continue
-			
+				break
+
 			for kill in single_query_JSON:
 				if datetime.strptime(kill["killTime"],"%Y-%m-%d %H:%M:%S") > self.startDatetime:
 					result_JSON.append(kill)
@@ -304,47 +273,29 @@ class Query(object):
 			_dump_results(self,query_results_JSON)
 			
 			yield result_JSON
-			
-	def __str__ (self):
-		if self.IDcount < 1:
-			raise QueryException(-1)
-		query_modifiers = self.queryArgs
-		for key,value in self.queryElements.iteritems():
-			if value == True:
-				query_modifiers = "%s/%s" % (key,query_modifiers)	#fetch modifiers must be first
-			else:
-				query_modifiers = "%s%s/%s/" % (query_modifiers,key,value)
 		
-		if len(self.queryModifiers) > 0:			
-			if len(self.queryModifiers) == 1:	#Probably a better way to handle trailing '/' in join()
-				query_modifiers = "%s%s/" % (query_modifiers,"/".join(self.queryModifiers))
-			else:
-				query_modifiers = "%s%s" % (query_modifiers,"/".join(self.queryModifiers))
-		return "%s%s" % (self.address,query_modifiers)
+	def fetch(self):
+		return fetchResults(self)
 	
-def latestKillID(kill_obj):
-	earliest_time = datetime.strptime("1970-01-01 00:00:00","%Y-%m-%d %H:%M:%S")	#epoch 0
-	latest_ID = 0
-	for kill in kill_obj:
-		killTime = datetime.strptime(kill["killTime"],"%Y-%m-%d %H:%M:%S")
-		if killTime > earliest_time:
-			earliest_time = killTime
-			latest_ID = kill["killID"]
-			
-	return int(latest_ID)
-	
-def earliestKillID(kill_obj):
-	latest_time = datetime.utcnow()
-	earliest_ID = 0
-	for kill in kill_obj:
-		killTime = datetime.strptime(kill["killTime"],"%Y-%m-%d %H:%M:%S")
-		if killTime < latest_time:
-			latest_time = killTime
-			earliest_ID = kill["killID"]
-			
-	return int(earliest_ID)
+	def fetch_one(self):
+		return fetchResult(self.get_query())
 
-def fetchResults(queryObj,joined_json = []):
+	
+def latestKillID(kill_list):
+	max_time, max_id = max( 
+		(datetime.strptime(kill["killTime"],"%Y-%m-%d %H:%M:%S"), int(kill["killID"])) 
+			for kill in kill_list
+	)
+	return max_id
+
+def earliestKillID(kill_list):
+	min_time, min_id = min( 
+		(datetime.strptime(kill["killTime"],"%Y-%m-%d %H:%M:%S"), int(kill["killID"])) 
+			for kill in kill_list
+	)
+	return min_id
+
+def fetchResults(queryObj, joined_json = []):
 	query_complete = False
 	
 	try:	#only start at latest killID if not already assigned
@@ -359,7 +310,7 @@ def fetchResults(queryObj,joined_json = []):
 		print "fetching: %s" % queryObj
 		
 		try:
-			tmp_JSON = fetchResult(str(queryObj))	#fetch single query result
+			tmp_JSON = fetchResult(queryObj.get_query())	#fetch single query result
 		except Exception, E:
 			print "Fatal exception, going down in flames"
 			print E
@@ -451,8 +402,8 @@ def fetchResult(zkb_url):
 	return JSON_obj
 
 def fetchLatestKillID (start_date):
-	singleton_query = Query(start_date,"api-only/solo/kills/limit/1/")
-	kill_obj = fetchResult(str(singleton_query))
+	singleton_query = ZKBQuery(start_date,"api-only/solo/kills/limit/1/")
+	kill_obj = fetchResult(singleton_query.get_query())
 	return int(kill_obj[0]["killID"])
 	
 def _snooze(http_header,multiplier=1):
@@ -574,14 +525,14 @@ def crash_recovery():
 	query_address = dump_obj.pop(0)
 	query_startdate = dump_obj.pop(0)
 	
-	zkb_args = query_address.split(base_query)
+	zkb_args = query_address.split(zkb_base_query)
 	
-	crashQuery = Query(query_startdate,zkb_args)
+	crashQuery = ZKBQuery(query_startdate,zkb_args)
 	
 	fetchResults(crashQuery,dump_obj)	#this isn't perfect.  Would prefer higher level control
 	
 def main():
-	newQuery2 = Query("2013-12-20","api-only/corporationID/1894214152/")
+	newQuery2 = ZKBQuery("2013-12-20","api-only/corporationID/1894214152/")
 	
 	#_crash_recovery()
 	

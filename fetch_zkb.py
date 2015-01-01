@@ -160,11 +160,10 @@ def get_crawl_list (method):
 			WHERE categoryid = 6'''
 	elif method.upper() == 'GROUP':
 		crawl_query = '''
-			SELECT grp.groupid
-			FROM invtypes conv
-			JOIN invgroups grp ON (conv.groupID = grp.groupID)
+			SELECT groupid
+			FROM invgroups
 			WHERE categoryid = 6
-			GROUP BY grp.groupid'''
+			'''
 	else:
 		print 'Unsupported fetch method: %s' % method.upper()
 		sys.exit(2)
@@ -383,7 +382,7 @@ def main():
 	print 'Fetching zkb data'
 	####FETCH LIVE KILL DATA####
 	for group in ProgressObj.groups_remaining:
-		QueryObj = zkb.Query(api_fetch_limit)
+		QueryObj = zkb.ZKBQuery(api_fetch_limit)
 		
 		##TODO: add multi-group scraping.  Joined group_list should work in setup below
 		if   ProgressObj.mode == 'SHIP': QueryObj.shipID(group)

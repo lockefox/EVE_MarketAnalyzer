@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{4e9b6424-03a8-470d-9526-42b62376fbd6}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>stat_script.py</StartupFile>
+    <StartupFile>zkb.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
@@ -27,6 +27,9 @@
     <Content Include="SQL\crest_markethistory.mysql" />
     <Content Include="SQL\crest_serverprices.mysql" />
     <Content Include="SQL\crest_systemindex.mysql" />
+    <Content Include="SQL\kill_fits.mysql" />
+    <Content Include="SQL\kill_losses.mysql" />
+    <Content Include="SQL\kill_participants.mysql" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="fetch_crest.py" />
@@ -37,6 +40,9 @@
     <Compile Include="rpy_test.py" />
     <Compile Include="stat_script.py" />
     <Compile Include="zkb.py" />
+    <Compile Include="zkb_exceptions.py">
+      <SubType>Code</SubType>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <Folder Include="SQL" />
