@@ -80,7 +80,6 @@ def secondsValidator(value):
 		return str(secs)
 	raise InvalidQueryValue(value, "pastSeconds is limited to a max of 7 days.")
 
-
 zkb_required = (
 	"characterID", 
 	"corporationID", 
@@ -221,6 +220,8 @@ class ZKBQuery(object):
 		return self
 
 	def __getattr__(self, name):
+		if name.startswith("_"):
+			return object.__getattr__(self, name)
 		return lambda v=True: self.validateAndSet(name=name, value=v)
 		
 	def __str__(self):
@@ -283,6 +284,7 @@ def earliestKill(kill_list):
 def fetchResults(queryObj, joined_json = []):
 	try:
 		for result in queryObj:
+			print queryObj
 			joined_json += result
 	except:
 		print "Fatal exception, going down in flames"
@@ -433,7 +435,7 @@ def crash_recovery():
 	fetchResults(crashQuery,dump_obj)	#this isn't perfect.  Would prefer higher level control
 	
 def main():
-	newQuery2 = ZKBQuery("2013-12-20","api-only/corporationID/1894214152/")
+	newQuery2 = ZKBQuery("2014-12-27","api-only/corporationID/1894214152/")
 	
 	#_crash_recovery()
 	
