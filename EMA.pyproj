@@ -43,6 +43,9 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="zkb.py" />
+    <Compile Include="zkb_config.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="zkb_exceptions.py">
       <SubType>Code</SubType>
     </Compile>
