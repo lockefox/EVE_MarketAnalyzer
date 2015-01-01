@@ -39,6 +39,9 @@
     <Compile Include="fetch_zkb.py" />
     <Compile Include="rpy_test.py" />
     <Compile Include="stat_script.py" />
+    <Compile Include="throttle.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="zkb.py" />
     <Compile Include="zkb_exceptions.py">
       <SubType>Code</SubType>

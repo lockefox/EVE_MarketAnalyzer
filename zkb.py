@@ -1,18 +1,15 @@
 #!/Python27/python.exe
 from __future__ import division
-import sys, gzip, StringIO, sys, math, os, getopt, time, json, socket
-import requests
-import urllib2
-# import MySQLdb
-import ConfigParser
+import time, json, requests, ConfigParser, itertools
 from datetime import datetime
-import itertools
+from throttle import RetryPolicy
+
 flatten = itertools.chain.from_iterable
 
 from zkb_exceptions import *
 
 try:
-	import stomp	#for live connections later
+#for live connections later
 	CANSTOMP = True
 except ImportError:
 	CANSTOMP = False
@@ -188,9 +185,10 @@ class ZKBQuery(object):
 		self.queryElements = {}
 		self.queryModifiers = set()
 		self.startDate = dateValidator(startDate, "%Y-%m-%d")
-		self.startDatetime = datetime.strptime(self.startDate,"%Y-%m-%d")
+		self.startDateTime = datetime.strptime(self.startDate,"%Y-%m-%d")
 		self.response = None
 		self.parseQueryArgs(queryArgs)
+		self.startTime(self.startDate)
 		
 	def parseQueryArgs(self, queryArgs):
 		param = None
@@ -242,37 +240,24 @@ class ZKBQuery(object):
 			return str(self)
 		raise TooFewRequiredParameters(str(self), self.Required)
 
-	def __iter__ (self):
-		query_results_JSON = []
+	def __iter__(self):
 		if 'beforeKillID' not in self.queryElements:
 			self.beforeKillID(fetchLatestKillID(self.startDate))
-
 		while True:
-			result_JSON = []
-			try:
-				single_query_JSON = fetchResult(str(self))
-			except Exception, E:
-				print "Fatal exception, going down in flames"
-				print E
-				_dump_results(self,query_results_JSON)	#major failure, dump for restart
-				sys.exit(3)
-			
-			beforeKill = int(earliestKillID(single_query_JSON))
-			
-			if len(single_query_JSON) == 0:
-				break
+			# no try/except -- it is the responsibility of the caller to handle recovery
+			single_query_JSON = self.fetch_one()
+			if len(single_query_JSON) == 0: break
 
-			for kill in single_query_JSON:
-				if datetime.strptime(kill["killTime"],"%Y-%m-%d %H:%M:%S") > self.startDatetime:
-					result_JSON.append(kill)
-					query_results_JSON.append(kill)
-				else:
-					query_complete = True
-					
-			self.beforeKillID(beforeKill)
-			_dump_results(self,query_results_JSON)
-			
+			beforeKillTime, beforeKillID = earliestKill(single_query_JSON)
+			# result_JSON should be == single_query_JSON
+			result_JSON = filter(lambda kill: killDateTime(kill) > self.startDateTime, single_query_JSON)
+			if len(result_JSON) == 0: break
+
 			yield result_JSON
+
+			if beforeKillTime < self.startDateTime: break
+
+			self.beforeKillID(beforeKillID)
 		
 	def fetch(self):
 		return fetchResults(self)
@@ -280,130 +265,46 @@ class ZKBQuery(object):
 	def fetch_one(self):
 		return fetchResult(self.get_query())
 
+def killDateTime(kill):
+	return datetime.strptime(kill["killTime"],"%Y-%m-%d %H:%M:%S")
 	
-def latestKillID(kill_list):
-	max_time, max_id = max( 
-		(datetime.strptime(kill["killTime"],"%Y-%m-%d %H:%M:%S"), int(kill["killID"])) 
+def latestKill(kill_list):
+	return max( 
+		(killDateTime(kill), int(kill["killID"])) 
 			for kill in kill_list
 	)
-	return max_id
 
-def earliestKillID(kill_list):
-	min_time, min_id = min( 
-		(datetime.strptime(kill["killTime"],"%Y-%m-%d %H:%M:%S"), int(kill["killID"])) 
+def earliestKill(kill_list):
+	return min( 
+		(killDateTime(kill), int(kill["killID"])) 
 			for kill in kill_list
 	)
-	return min_id
 
 def fetchResults(queryObj, joined_json = []):
-	query_complete = False
-	
-	try:	#only start at latest killID if not already assigned
-		beforeKill = queryObj.queryElements["beforeKillID"]
-		#print beforeKill
-	except KeyError as E:
-		beforeKill = fetchLatestKillID(queryObj.startDate)
-		queryObj.beforeKillID(beforeKill)
-	
-	while query_complete == False:
-		
-		print "fetching: %s" % queryObj
-		
-		try:
-			tmp_JSON = fetchResult(queryObj.get_query())	#fetch single query result
-		except Exception, E:
-			print "Fatal exception, going down in flames"
-			print E
-			_dump_results(queryObj,joined_json)	#major failure, dump for restart
-			sys.exit(3)
-			
-		beforeKill = earliestKillID(tmp_JSON)
-		
-		if len(tmp_JSON) == 0:	#if return is empty (and valid) complete
-			query_complete = True
-			continue
-			
-		for kill in tmp_JSON:
-			if datetime.strptime(kill["killTime"],"%Y-%m-%d %H:%M:%S") > queryObj.startDatetime:
-				joined_json.append(kill)	#dump all valid entries into object
-			else:
-				query_complete = True
-				
-		queryObj.beforeKillID(beforeKill)	#reset the queryObj before dumping
-		_dump_results(queryObj,joined_json)
+	try:
+		for result in queryObj:
+			joined_json += result
+	except:
+		print "Fatal exception, going down in flames"
+		_dump_results(queryObj, joined_json)	#major failure, dump for restart
+		raise
 	return joined_json
 	
-def fetchResult(zkb_url):	
-	global sleepTime
-	global gzip_override
-	
-	request = urllib2.Request(zkb_url)
-	request.add_header('Accept-Encoding','gzip')
-	request.add_header('User-Agent',User_Agent)
-	
-	#log query
-	for tries in range (0,retry_limit):
-		print 'sleepTime %s' % sleepTime
-		time.sleep(sleepTime)			#default wait between queries
-		time.sleep(default_sleep*tries)	#wait in case of retry
-		
+def fetchResult(zkb_url, policy=RetryPolicy()):
+	retry_ok = lambda: True
+	while retry_ok():
 		try:
-			opener = urllib2.build_opener()	
-			raw_zip = opener.open(request)
-			http_header = raw_zip.headers
-			dump_zip_stream = raw_zip.read()
-			#print http_header
-			#print sleepTime
-		except urllib2.HTTPError as e:
-			#log_filehandle.write("%s: %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), e))
-			print "retry %s: %s" %(zkb_url,tries+1)
-			#print http_header
-			continue
-		except urllib2.URLError as er:
-			#log_filehandle.write("%s: %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), er))
-			print "URLError.  Retry %s: %s" %(zkb_url,tries+1)
-			print http_header
-			continue
-		except socket.error as err:
-			#log_filehandle.write("%s: %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), err))
-			print "Socket Error.  Retry %s: %s" %(zkb_url,tries+1)
-		
-		if snooze_routine == "HOURLY":
-			sleepTime = _hourlySnooze(http_header)
-		elif snooze_routine == "HOUR2":
-			sleepTime = _hour2Snooze(http_header)
-		elif snooze_routine == "POLITE":
-			sleepTime = _politeSnooze(http_header)
-		else:
-			sleepTime = default_sleep
-			
-		do_gzip = http_header.get('Content-Encoding','') == 'gzip'
-				
-		if do_gzip:
-			try:
-				buf = StringIO.StringIO(dump_zip_stream)
-				zipper = gzip.GzipFile(fileobj=buf)
-				JSON_obj = json.load(zipper)
-			except ValueError as e:
-				print "Empty response.  Retry %s: %s" % (zkb_url,tries+1)
-				continue
-			except IOError as e:
-				print "gzip unreadable: Retry %s: %s" % (zkb_url,tries+1) 
-				continue
-			else:
-				break
-		else:
-			JSON_obj = json.loads(response)
-			break
-	else:
-		print http_header
-		sys.exit(2)
-	
-	return JSON_obj
+			response = requests.get(zkb_url, headers={'User-Agent': User_Agent})
+			if response.ok:
+				return response.json()
+			# policy will decide which server errors are recoverable
+			retry_ok = policy.server_error(response)
+		except Exception as e: 
+			# Policy will decide which exceptions are recoverable
+			retry_ok = policy.transport_exception(uri, e)
 
-def fetchLatestKillID (start_date):
-	singleton_query = ZKBQuery(start_date,"api-only/solo/kills/limit/1/")
-	kill_obj = fetchResult(singleton_query.get_query())
+def fetchLatestKillID(start_date):
+	kill_obj = ZKBQuery(start_date, "api-only/solo/kills/limit/1/").fetch_one()
 	return int(kill_obj[0]["killID"])
 	
 def _snooze(http_header,multiplier=1):

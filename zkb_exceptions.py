@@ -1,3 +1,5 @@
+from exceptions import Exception
+
 class QueryException(Exception):
 	def __init__(self, msg="Useless generic Exception"):
 		Exception.__init__(self, msg)
