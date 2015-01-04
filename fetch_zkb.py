@@ -390,7 +390,7 @@ def main():
 		else: 
 			print 'Unsupported fetch method: %s' % method.upper()
 			sys.exit(2)
-		QueryObj.api_only
+		QueryObj.api_only()
 	
 		if ProgressObj.latestKillID != 0:	#recover progress
 			QueryObj.beforeKillID(ProgressObj.latestKillID)

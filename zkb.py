@@ -4,7 +4,7 @@ import time, json, requests
 from datetime import datetime
 from zkb_config import *
 
-from throttle import RetryPolicy
+from throttle import FlowManager
 
 try:
 #for live connections later
@@ -22,12 +22,12 @@ class ZKBQuery(object):
 	Modifiers = zkb_modifiers # a list of query parameters that don't take a value
 	Required = zkb_required # a list of query parameters which you must have at least one of (not all are required)
 			
-	def __init__ (self, startDate, queryArgs=""):
+	def __init__ (self, startDate, queryArgs="", manager=None):
 		self.queryElements = {}
 		self.queryModifiers = set()
+		self.policy = manager or FlowManager()
 		self.startDate = dateValidator(startDate, "%Y-%m-%d")
 		self.startDateTime = datetime.strptime(self.startDate,"%Y-%m-%d")
-		self.response = None
 		self.parseQueryArgs(queryArgs)
 		self.startTime(self.startDate)
 		
@@ -87,8 +87,6 @@ class ZKBQuery(object):
 		raise TooFewRequiredParameters(str(self), self.Required)
 
 	def __iter__(self):
-		if 'beforeKillID' not in self.queryElements:
-			self.beforeKillID(fetchLatestKillID(self.startDate))
 		while True:
 			# no try/except -- it is the responsibility of the caller to handle recovery
 			single_query_JSON = self.fetch_one()
@@ -102,14 +100,30 @@ class ZKBQuery(object):
 			yield result_JSON
 
 			if beforeKillTime < self.startDateTime: break
-
+			self.policy.throttle(self.get_query())
 			self.beforeKillID(beforeKillID)
 		
 	def fetch(self):
 		return fetchResults(self)
 	
 	def fetch_one(self):
-		return fetchResult(self.get_query())
+		zkb_url = self.get_query()
+		while True:
+			try:
+				response = requests.get(zkb_url, headers={'User-Agent': User_Agent})
+				if not response.ok:
+					self.policy.server_error(response)
+				response_json = response.json() # could raise ValueError if json is bad
+			except requests.HTTPError:
+				# this came from server_error.
+				raise
+			except Exception as e:
+				self.policy.transport_exception(zkb_url, e)
+			else:
+				self.policy.update_throttle(response)
+				return response_json
+
+			self.policy.throttle(zkb_url)
 
 def killDateTime(kill):
 	return datetime.strptime(kill["killTime"],"%Y-%m-%d %H:%M:%S")
@@ -137,18 +151,6 @@ def fetchResults(queryObj, joined_json = []):
 		raise
 	return joined_json
 	
-def fetchResult(zkb_url, policy=RetryPolicy()):
-	retry_ok = lambda: True
-	while retry_ok():
-		try:
-			response = requests.get(zkb_url, headers={'User-Agent': User_Agent})
-			if response.ok:
-				return response.json()
-			# policy will decide which server errors are recoverable
-			retry_ok = policy.server_error(response)
-		except Exception as e: 
-			# Policy will decide which exceptions are recoverable
-			retry_ok = policy.transport_exception(uri, e)
 
 def fetchLatestKillID(start_date):
 	kill_obj = ZKBQuery(start_date, "api-only/solo/kills/limit/1/").fetch_one()
