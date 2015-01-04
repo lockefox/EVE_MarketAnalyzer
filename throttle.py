@@ -128,7 +128,7 @@ class ProgressManager(SimpleProgressManager):
 class ThreadedProgressManager(ProgressManager):
 	def __init__(self, quota=zkb_scrape_limit):
 		ProgressManager.__init__(self, quota)
-		self.incoming_reports = Queue()
+		self.incoming_reports = PriorityQueue()
 		self.report_thread = threading.Thread(
 			name="ProgressManager report thread",
 			target=self.report_thread_routine
@@ -142,7 +142,7 @@ class ThreadedProgressManager(ProgressManager):
 				args = self.incoming_reports.get(True, self.average_response())
 				ProgressManager.report(self, *args)
 				self.incoming_reports.task_done()
-			except Queue.Empty:
+			except Empty:
 				self.drain_requests(time.time())
 
 	def report(self, *args):
