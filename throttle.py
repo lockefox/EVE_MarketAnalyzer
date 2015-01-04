@@ -2,7 +2,7 @@ from __future__ import division
 from zkb_config import *
 import time, requests, _strptime # because threading
 import threading
-from Queue import PriorityQueue, deque, Empty
+from Queue import Queue, PriorityQueue, deque, Empty
 
 class ProgressManagerBase(object):
 	def __init__(self, quota=zkb_scrape_limit):
@@ -10,6 +10,7 @@ class ProgressManagerBase(object):
 	def report(self, current, quota, elapsed, over_quota=False): pass
 	def current_throttle(self): pass
 	def headroom(self): pass
+	def register(self, event): pass
 
 class SimpleProgressManager(ProgressManagerBase):
 	def __init__(self, quota=zkb_scrape_limit):
@@ -32,8 +33,6 @@ class SimpleProgressManager(ProgressManagerBase):
 				else:
 					self.draining_requests.append(w)
 					break
-
-
 
 	def report(self, current, quota, elapsed, over_quota=False):
 		if not self.draining_requests and over_quota:
@@ -83,7 +82,7 @@ class SimpleProgressManager(ProgressManagerBase):
 		if requests_out == 0:
 			# should never happen
 			self.next_throttle = 0.0
-			return
+			return False
 		elif over_quota:
 			# This can only happen if something drastic is different between 
 			# the server and our record keeping. 
@@ -112,15 +111,22 @@ class SimpleProgressManager(ProgressManagerBase):
 		self.draining_requests.append(w)
 		self.draining_requests.rotate(1-to_drain)
 
+		return False
+
 	def headroom(self):
 		return self.quota - len(self.draining_requests)
 
 	def average_response(self):
 		if not self.recent_elapsed: return 2.0
-		return sum(self.recent_elapsed) / len(self.recent_elapsed)
+		result = sum(self.recent_elapsed) / len(self.recent_elapsed)
+		print "Avg response: {0}".format(result)
+		return result
 
 	def current_throttle(self):
 		return self.next_throttle
+
+	def register(self, event):
+		event.set()
 
 class ProgressManager(SimpleProgressManager):
 	pass
@@ -128,6 +134,7 @@ class ProgressManager(SimpleProgressManager):
 class ThreadedProgressManager(ProgressManager):
 	def __init__(self, quota=zkb_scrape_limit):
 		ProgressManager.__init__(self, quota)
+		self.threads = deque()
 		self.incoming_reports = PriorityQueue()
 		self.report_thread = threading.Thread(
 			name="ProgressManager report thread",
@@ -135,6 +142,9 @@ class ThreadedProgressManager(ProgressManager):
 		)
 		self.report_thread.daemon = True
 		self.report_thread.start()
+
+	def register(self, event):
+		self.threads.appendleft(event)
 
 	def report_thread_routine(self):
 		while True:
@@ -145,14 +155,25 @@ class ThreadedProgressManager(ProgressManager):
 			except Empty:
 				self.drain_requests(time.time())
 
+	def drain_requests(self, now):
+		super(ThreadedProgressManager, self).drain_requests(now)
+		free = max(self.quota - len(self.draining_requests), 0)
+		for _ in range(min(free, len(self.threads))):
+			t = self.threads.pop()
+			t.set()
+			self.threads.appendleft(t)
+
 	def report(self, *args):
 		self.incoming_reports.put(args)
+		return self.quota - len(self.draining_requests) < 2 * len(self.threads)
 		
 class FlowManager(object):
 	def __init__(self, max_tries=retry_limit, progress_obj=None):
 		self.max_tries = max_tries
 		self.urls = {}
-		self.progress = progress_obj or ThreadedProgressManager()
+		self.throttle_event = threading.Event()
+		self.progress = progress_obj or SimpleProgressManager()
+		self.progress.register(self.throttle_event)
 
 	def server_error(self, resp):
 		assert(isinstance(resp, requests.Response))
@@ -194,10 +215,21 @@ class FlowManager(object):
 			resp.status_code in (403, 429) or 
 			resp.headers.get('retry-after') is not None):
 			emergency_over_quota = True
-		self.progress.report(current, quota, resp.elapsed, emergency_over_quota)
+		must_block = self.progress.report(
+			current, 
+			quota, 
+			resp.elapsed.total_seconds(), 
+			emergency_over_quota
+		)
+		if must_block: self.throttle_event.clear()
 		(tries, rest) = self.urls.setdefault(resp.request.url, (1, 0.0))
 		self.urls[resp.request.url] = (tries, max(self.progress.current_throttle(), rest))
 
 	def throttle(self, url):
+		if not self.throttle_event.is_set():
+			print "Waiting."
+			self.throttle_event.wait()
+			print "Done waiting."
 		_, rest = self.urls.get(url, (0, 0.0))
+		print "sleep: {0}".format(rest)
 		time.sleep(rest)
