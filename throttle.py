@@ -1,61 +1,123 @@
+from __future__ import division
 from zkb_config import *
 import time, requests, _strptime # because threading
 import threading
-from Queue import Queue, deque
+from Queue import PriorityQueue, deque
 
 class ProgressManagerBase(object):
 	def __init__(self, quota=zkb_scrape_limit):
 		self.quota = quota
-	def report(self, elapsed, current=None, quota=None, over_quota=False): pass
+	def report(self, current, quota, elapsed, over_quota=False): pass
 	def current_throttle(self): pass
+	def headroom(self): pass
 
 class SimpleProgressManager(ProgressManagerBase):
 	def __init__(self, quota=zkb_scrape_limit):
 		ProgressManagerBase.__init__(self, quota)
 		self.draining_requests = deque()
+		self.recent_elapsed = deque([], 30)
 		self.next_throttle = 0.0
+		self.bolus = 0
 
-	def report(self, elapsed, current=None, quota=None, over_quota=False):
-		now = time.time()
-		self.draining_requests.appendleft(now)
-		if (quota is not None and 
-			(quota < self.quota or 
-			(quota > self.quota and not over_quota))):
-			self.quota = quota
-		if (current is not None and current > len(self.draining_requests)):
-			print "current: %s, quota: %s, draining: %s" % (current, quota, len(self.draining_requests))
-			for _ in range(current - len(self.draining_requests)):
-				self.draining_requests.appendleft(now)
-		if over_quota:
-			# This can only happen if something drastic is different between 
-			# the server and our record keeping. 
-			if not len(self.draining_requests):
-				raise Exception("Augh! no requests draining, no current requests in the header, yet over quota??!")
-			# wait for 100 requests to drain.
-			to_drain = min(len(self.draining_requests, 100))
-			self.draining_requests.rotate(to_drain-1)
-			w = self.draining_requests.pop()
-			self.next_throttle = 3600 + w - now
-			self.draining_requests.append(w)
-			self.draining_requests.rotate(1-to_drain)
-		elif not len(self.draining_requests):
-			self.next_throttle = 0.0
-		elif 0 < len(self.draining_requests) < self.quota-1:
+	def drain_requests(self, now):
+		# clear any expired requests
+		if len(self.draining_requests) > 1:
 			w = self.draining_requests.pop()
 			while True:
 				if now - w > 3600:
-					if len(self.draining_requests):
+					if len(self.draining_requests) > 0:
 						w = self.draining_requests.pop()
 					else:
 						break
 				else:
 					self.draining_requests.append(w)
 					break
-			self.next_throttle = 0.0
-		else:
-			# wait until the oldest request has drained
+
+
+
+	def report(self, current, quota, elapsed, over_quota=False):
+		if not self.draining_requests and over_quota:
+				# This can only happen if we used up all our quota before we even started
+				# this query session
+				raise Exception(
+					"Augh! no requests draining, yet over quota? " + 
+						"Try again in an hour!"
+					)
+
+		now = time.time()
+		requests_out = len(self.draining_requests)
+
+		# We want to fix up the queue length if there are outstanding requests
+		# from a previous session, but we don't want to double-count if we
+		# get reports out of order.
+		# In the normal case current == requests_out + 1
+		if (current > requests_out):
+			if current - requests_out > 1:
+				print "current: {0}, quota: {1}, draining: {2}".format( 
+					current, 
+					quota, 
+					requests_out)
+			for _ in range(current - requests_out):
+				self.draining_requests.appendleft(now)
+		# If requests from a previous session have expired we want to clear the 
+		# queue but we don't want to be too aggressive in case we get reports out of
+		# order (so we won't clear stuff that expires in 5 minutes or less).
+		elif 0 < current < requests_out:
 			w = self.draining_requests.pop()
-			self.next_throttle = 3600 + w - now
+			if now - w > 300:
+				for _ in range(requests_out - current):
+					self.draining_requests.pop()
+			else:
+				self.draining_requests.append(w)
+
+		self.drain_requests(now)
+
+		self.recent_elapsed.append(elapsed)
+
+		requests_out = len(self.draining_requests)
+
+		if (0 < quota < self.quota or 
+			(quota > self.quota and not over_quota)):
+			self.quota = quota
+
+		if requests_out == 0:
+			# should never happen
+			self.next_throttle = 0.0
+			return
+		elif over_quota:
+			# This can only happen if something drastic is different between 
+			# the server and our record keeping. 
+			excess = max(current - quota + 2, abs(min(self.headroom(), 0)) + 2, 100)
+			frac_used = 1.0
+			to_drain = min(requests_out, excess)
+			avg_r = 0.0
+		else:
+			frac_used = requests_out / self.quota
+			one = (self.quota - 1) / self.quota
+			if frac_used < 0.5: frac_used = 0.0
+			elif frac_used < 0.875: frac_used = 8 * (frac_used - 0.5) / 3
+			elif frac_used < 1.0: frac_used = 1.0
+			if requests_out < self.quota:
+				frac_used = frac_used * one
+				avg_r = self.average_response()
+			else:
+				avg_r = 0.0
+			# if we are over quota but didn't get an over quota error, that's
+			# weird but we'll deal with it here.
+			to_drain = abs(self.headroom()) if self.headroom() < 0 else 1
+
+		self.draining_requests.rotate(to_drain-1)
+		w = self.draining_requests.pop()
+		self.next_throttle = max(frac_used * (3600 + w - now) - avg_r, 0.0)
+		self.draining_requests.append(w)
+		self.draining_requests.rotate(1-to_drain)
+
+	def headroom(self):
+		return self.quota - len(self.draining_requests)
+
+	def average_response(self):
+		if not self.recent_elapsed: return 2.0
+		return sum(self.recent_elapsed) / len(self.recent_elapsed)
 
 	def current_throttle(self):
 		return self.next_throttle
@@ -123,14 +185,13 @@ class FlowManager(object):
 
 	def update_throttle(self, resp, emergency_over_quota=False):
 		assert(isinstance(resp, requests.Response))
-		current = resp.headers.get('x-bin-request-count')
-		quota = resp.headers.get('x-bin-max-requests')
-		if current is not None: current = int(current)
-		if quota is not None: quota = int(quota)
-		if ((current is not None and quota is not None and current >= quota) or
+		current = int(resp.headers.get('x-bin-request-count', '0'))
+		quota = int(resp.headers.get('x-bin-max-requests', '0'))
+		if ((current > quota > 0) or
+			resp.status_code in (403, 429) or 
 			resp.headers.get('retry-after') is not None):
 			emergency_over_quota = True
-		self.progress.report(resp.elapsed, current, quota, emergency_over_quota)
+		self.progress.report(current, quota, resp.elapsed, emergency_over_quota)
 		(tries, rest) = self.urls.setdefault(resp.request.url, (1, 0.0))
 		self.urls[resp.request.url] = (tries, max(self.progress.current_throttle(), rest))
 
