@@ -8,6 +8,7 @@ conf.read(["init.ini", "init_local.ini"])
 
 zkb_base_query = conf.get("ZKB","base_query")
 query_limit = int(conf.get("ZKB","query_limit"))
+zkb_scrape_limit = int(conf.get("ZKB", "zkb_scrape_limit"))
 subquery_limit = int(conf.get("ZKB","subquery_limit"))
 retry_limit = int(conf.get("ZKB","retry_limit"))
 default_sleep = int(conf.get("ZKB","default_sleep"))

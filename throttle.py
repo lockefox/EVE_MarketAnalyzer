@@ -1,16 +1,62 @@
 from zkb_config import *
-import requests
+import time, requests, _strptime # because threading
+from Queue import Queue, deque
 
 class ProgressManagerBase(object):
-	def __init__(self, quota):
+	def __init__(self, quota=zkb_scrape_limit):
 		self.quota = quota
 	def report(self, elapsed, current=None, quota=None, over_quota=False): pass
 	def current_throttle(self): pass
 
 class SimpleProgressManager(ProgressManagerBase):
-	def __init__(self, quota):
+	def __init__(self, quota=zkb_scrape_limit):
 		ProgressManagerBase.__init__(self, quota)
+		self.draining_requests = deque()
+		self.next_throttle = 0.0
 
+	def report(self, elapsed, current=None, quota=None, over_quota=False):
+		now = time.time()
+		self.draining_requests.appendleft(now)
+		if (quota is not None and 
+			(quota < self.quota or 
+			(quota > self.quota and not over_quota))):
+			self.quota = quota
+		if (current is not None and current > len(self.draining_requests)):
+			for _ in range(current - len(self.draining_requests)):
+				self.draining_requests.appendleft(now)
+		if over_quota:
+			# This can only happen if something drastic is different between 
+			# the server and our record keeping. 
+			if not len(self.draining_requests):
+				raise Exception("Augh! no requests draining, no current requests in the header, yet over quota??!")
+			# wait for 100 requests to drain.
+			to_drain = min(len(self.draining_requests, 100))
+			self.draining_requests.rotate(to_drain-1)
+			w = self.draining_requests.pop()
+			self.next_throttle = 3600 + w - now
+			self.draining_requests.append(w)
+			self.draining_requests.rotate(1-to_drain)
+		elif not len(self.draining_requests):
+			self.next_throttle = 0.0
+		elif 0 < len(self.draining_requests) < self.quota-1:
+			w = self.draining_requests.pop()
+			while True:
+				if now - w > 3600:
+					if len(self.draining_requests):
+						w = self.draining_requests.pop()
+					else:
+						break
+				else:
+					self.draining_requests.append(w)
+					break
+			self.next_throttle = 0.0
+		else:
+			# wait until the oldest request has drained
+			w = self.draining_requests.pop()
+			self.next_throttle = 3600 + w - now
+
+	def current_throttle(self):
+		return self.next_throttle
 
 class ProgressManager(ProgressManagerBase):
 	pass
@@ -48,7 +94,7 @@ class FlowManager(object):
 		assert(isinstance(resp, requests.Response))
 		tries, rest = self.urls.setdefault(resp.request.url, (0, 0.0))
 		# simple linear backoff irrespective of exception type
-		self.urls[url] = (tries + 1, rest + 1.0)
+		self.urls[url] = (tries + 1, rest + 2.0)
 		if tries == max_tries:
 			raise ex
 
@@ -60,6 +106,11 @@ class FlowManager(object):
 		assert(isinstance(resp, requests.Response))
 		current = resp.headers.get('x-bin-request-count')
 		quota = resp.headers.get('x-bin-max-requests')
+		if current is not None: current = int(current)
+		if quota is not None: quota = int(quota)
+		if ((current is not None and quota is not None and current >= quota) or
+			resp.headers.get('retry-after') is not None):
+			emergency_over_quota = True
 		self.progress.report(resp.elapsed, current, quota, emergency_over_quota)
 		(tries, rest) = self.urls.setdefault(resp.request.url, (1, 0.0))
 		self.urls[resp.request.url] = (tries, max(self.progress.current_throttle(), rest))

@@ -1,9 +1,8 @@
 #!/Python27/python.exe
 from __future__ import division
-import time, json, requests
+import time, json, requests, _strptime # because threading
 from datetime import datetime
 from zkb_config import *
-
 from throttle import FlowManager
 
 try:
@@ -46,7 +45,13 @@ class ZKBQuery(object):
 		name = name.replace('_', '-')
 		if name in self.Synonyms: name = self.Synonyms[name]
 		if name not in self.Parameters:
-			raise InvalidQueryParameter(name, sorted(self.Parameters.keys() + self.Synonyms.keys()))
+			raise InvalidQueryParameter(
+				name, 
+				sorted(
+					self.Parameters.keys() + 
+					self.Synonyms.keys()
+				)
+			)
 		validator = self.Parameters[name]
 		value = validator(value)
 		if name in self.Modifiers:
@@ -66,13 +71,23 @@ class ZKBQuery(object):
 			return object.__getattr__(self, name)
 		qname = name.replace('_', '-')
 		if qname not in self.Synonyms and qname not in self.Parameters:
-			raise InvalidQueryParameter(name, sorted(self.Parameters.keys() + self.Synonyms.keys()))
+			raise InvalidQueryParameter(
+				name, 
+				sorted(
+					self.Parameters.keys() + 
+					self.Synonyms.keys()
+				)
+			)
 		return lambda v=True: self.validateAndSet(name=name, value=v)
 		
 	def __str__(self):
 		query = [self.Base]
 		query += sorted(self.queryModifiers)
-		query += sorted("{0}/{1}".format(p, v) for p, v in self.queryElements.iteritems() if v is not None)
+		query += sorted(
+			"{0}/{1}".format(p, v) 
+				for p, v in self.queryElements.iteritems() 
+				if v is not None
+			)
 		query.append("")
 		return "/".join(query)
 
@@ -94,7 +109,10 @@ class ZKBQuery(object):
 
 			beforeKillTime, beforeKillID = earliestKill(single_query_JSON)
 			# result_JSON should be == single_query_JSON
-			result_JSON = filter(lambda kill: killDateTime(kill) > self.startDateTime, single_query_JSON)
+			result_JSON = filter(
+				lambda kill: killDateTime(kill) > self.startDateTime, 
+				single_query_JSON
+			)
 			if len(result_JSON) == 0: break
 
 			yield result_JSON
@@ -113,7 +131,9 @@ class ZKBQuery(object):
 				response = requests.get(zkb_url, headers={'User-Agent': User_Agent})
 				if not response.ok:
 					self.policy.server_error(response)
-				response_json = response.json() # could raise ValueError if json is bad
+				else:
+					# could raise ValueError if json is bad
+					response_json = response.json() 
 			except requests.HTTPError:
 				# this came from server_error.
 				raise
@@ -150,7 +170,6 @@ def fetchResults(queryObj, joined_json = []):
 		_dump_results(queryObj, joined_json)	#major failure, dump for restart
 		raise
 	return joined_json
-	
 
 def fetchLatestKillID(start_date):
 	kill_obj = ZKBQuery(start_date, "api-only/solo/kills/limit/1/").fetch_one()
