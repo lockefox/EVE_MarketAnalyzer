@@ -2,7 +2,7 @@ from __future__ import division
 from zkb_config import *
 import time, requests, _strptime # because threading
 import threading
-from Queue import PriorityQueue, deque
+from Queue import PriorityQueue, deque, Empty
 
 class ProgressManagerBase(object):
 	def __init__(self, quota=zkb_scrape_limit):
@@ -21,11 +21,11 @@ class SimpleProgressManager(ProgressManagerBase):
 
 	def drain_requests(self, now):
 		# clear any expired requests
-		if len(self.draining_requests) > 1:
+		if self.draining_requests:
 			w = self.draining_requests.pop()
 			while True:
 				if now - w > 3600:
-					if len(self.draining_requests) > 0:
+					if self.draining_requests:
 						w = self.draining_requests.pop()
 					else:
 						break
@@ -135,12 +135,15 @@ class ThreadedProgressManager(ProgressManager):
 		)
 		self.report_thread.daemon = True
 		self.report_thread.start()
-	
+
 	def report_thread_routine(self):
 		while True:
-			args = self.incoming_reports.get()
-			ProgressManager.report(self, *args)
-			self.incoming_reports.task_done()
+			try:
+				args = self.incoming_reports.get(True, self.average_response())
+				ProgressManager.report(self, *args)
+				self.incoming_reports.task_done()
+			except Queue.Empty:
+				self.drain_requests(time.time())
 
 	def report(self, *args):
 		self.incoming_reports.put(args)
