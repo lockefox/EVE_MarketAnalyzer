@@ -1,5 +1,6 @@
 from zkb_config import *
 import time, requests, _strptime # because threading
+import threading
 from Queue import Queue, deque
 
 class ProgressManagerBase(object):
@@ -58,12 +59,29 @@ class SimpleProgressManager(ProgressManagerBase):
 	def current_throttle(self):
 		return self.next_throttle
 
-class ProgressManager(ProgressManagerBase):
+class ProgressManager(SimpleProgressManager):
 	pass
 
-class ThreadedProgressManager(ProgressManagerBase):
-	pass
+class ThreadedProgressManager(ProgressManager):
+	def __init__(self, quota=zkb_scrape_limit):
+		ProgressManager.__init__(self, quota)
+		self.incoming_reports = Queue()
+		self.report_thread = threading.Thread(
+			name="ProgressManager report thread",
+			target=self.report_thread_routine
+		)
+		self.report_thread.daemon = True
+		self.report_thread.start()
+	
+	def report_thread_routine(self):
+		while True:
+			args = self.incoming_reports.get()
+			ProgressManager.report(self, *args)
+			self.incoming_reports.task_done()
 
+	def report(self, *args):
+		self.incoming_reports.put(args)
+		
 class FlowManager(object):
 	def __init__(self, max_tries=retry_limit, progress_obj=None):
 		self.max_tries = max_tries
