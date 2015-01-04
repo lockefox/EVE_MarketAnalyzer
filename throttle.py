@@ -23,6 +23,7 @@ class SimpleProgressManager(ProgressManagerBase):
 			(quota > self.quota and not over_quota))):
 			self.quota = quota
 		if (current is not None and current > len(self.draining_requests)):
+			print "current: %s, quota: %s, draining: %s" % (current, quota, len(self.draining_requests))
 			for _ in range(current - len(self.draining_requests)):
 				self.draining_requests.appendleft(now)
 		if over_quota:
@@ -86,7 +87,7 @@ class FlowManager(object):
 	def __init__(self, max_tries=retry_limit, progress_obj=None):
 		self.max_tries = max_tries
 		self.urls = {}
-		self.progress = progress_obj or SimpleProgressManager()
+		self.progress = progress_obj or ThreadedProgressManager()
 
 	def server_error(self, resp):
 		assert(isinstance(resp, requests.Response))
