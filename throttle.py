@@ -245,7 +245,6 @@ class FlowManager(object):
 
 	def transport_exception(self, url, ex):
 		assert(isinstance(ex, Exception))
-		assert(isinstance(resp, requests.Response))
 		tries, rest = self.urls.setdefault(resp.request.url, (0, 0.0))
 		# simple linear backoff irrespective of exception type
 		self.urls[url] = (tries + 1, rest)

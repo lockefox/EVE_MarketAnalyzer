@@ -35,75 +35,99 @@ default_group_mode = conf.get('ZKB','group_routine')
 table_headers = {}
 
 class Progress(object):
-	__initialized = False
-	__fresh_run = False
-	def __init__ (self, mode = default_group_mode):
-		self.latest_query = ''
-		self.killIDs = []
-		self.groups_completed = []
-		self.groups_remaining = []
+	def __init__ (self, mode=default_group_mode, logfile=progress_file):
 		self.mode = mode
-		self.latestKillID = 0
-		
-		self.parse_crash_log()	#init object automatically
-		
-		if self.__fresh_run:
-			self.groups_remaining = get_crawl_list(self.mode)
-					
-	def build_dump_object(self):
-		dump_object = {}
-		
-		dump_object['killIDs'] = self.killIDs
-		dump_object['groups_completed'] = self.groups_completed
-		dump_object['groups_remaining'] = self.groups_remaining
-		dump_object['latest_query'] = self.latest_query
-		dump_object['mode'] = self.mode
-		
-		return dump_object
-		
-	def dump_crash_log (self, json_file = progress_file):
-		file = open(json_file,'w')
-		file.write(json.dumps(self.build_dump_object(), sort_keys=True, indent=3, separators=(',',': ')))
-		file.close()
-		
-	def parse_crash_log(self, json_file = progress_file):
-		try:
-			file = open(json_file,'r')
-		except Exception as e:
-			print 'Crash file not found.  Starting fresh'
-			self.__fresh_run = True
-			return
-		dump_object = json.load(file)
-		file.close()
-		
-		if self.mode != dump_object['mode']:
-			print 'Modes don\'t match.  Starting fresh'
-			self.__fresh_run = True
-			return
-			
-		self.mode = dump_object['mode']
-		self.killIDs = dump_object['killIDs']
-		self.groups_completed = dump_object['groups_completed']
-		self.groups_remaining = dump_object['groups_remaining']
-		self.latest_query = dump_object['latest_query']
-		self.latestKillID = min(dump_object['killIDs'])
+		self.log_base = logfile
+		self.manager = ProgressManager()
+		self.state_lock = threading.Lock()
+		self.outstanding_queries = deque()
+		self.running_queries = {}
+		self.results_to_write = Queue()
+		self.threads = []
 
-	def addKillID(self,newkillID):
-		self.killIDs.append(int(newkillID))
-		self.latestKillID = newkillID
+		if not self.parse_crash_log(): # init object automatically
+			# get the crawl list etc
+			pass
+
+	def launch_thread(self, query=None):
+		t = threading.Thread(
+			target=self.query_thread_routine,
+			kwargs={'query': query}
+		)
+		self.threads.append(t)
+		t.start()
+
+	def query_thread_routine(self, query=None):
+		flow_manager = FlowManager(progress_obj=self.manager)
+		me = threading.current_thread()
+		while True:
+			with self.state_lock:
+				if query is None:
+					query = self.outstanding_queries.pop()
+				current_query = ZKBQuery(api_fetch_limit, query, flow_manager)
+				self.running_queries[me] = current_query
+			self.dump_all()
+			for result in current_query:
+				self.results_to_write.put(result)
+				self.dump_running()
+			query = None
+
+	def dump_running(self):
+		with self.state_lock():
+			running = {}
+			running['running_queries'] = [
+				q.getQueryArgs() 
+					for q in self.running_queries.values()
+			]
+			running['logfile'] = "running." + self.log_base
+			with open(running['logfile'], 'w') as log:
+				json.dump(
+					obj=running,
+					fp=log,
+					indent=3,
+					separators=(',',': ')
+				)
+
+	def build_dump_objects(self):
+		outstanding = {}
+		outstanding['outstanding_queries'] = list(self.outstanding_queries)
+		outstanding['mode'] = self.mode
+		outstanding['logfile'] = "outstanding." + self.log_base
+
+		running = {}
+		running['running_queries'] = [
+			q.getQueryArgs() 
+				for q in self.running_queries.values()
+		]
+		running['logfile'] = "running." + self.log_base
+		return outstanding, running
 		
-	def update_query(self,query_str):
-		self.latest_query = query_str
+	def dump_all(self):
+		with self.state_lock:
+			for o in self.build_dump_objects():
+				with open(o['logfile'], 'w') as log:
+					json.dump(
+						obj=o,
+						fp=log, 
+						sort_keys=True,
+						indent=3,
+						separators=(',',': ')
+					)
 		
-	def group_complete(self, completed_group_id):
-		print 'group completed: %s' % completed_group_id
-		self.groups_remaining.remove(completed_group_id)
-		self.groups_completed.append(completed_group_id)
-		
-	##TODO: __iter__ to have progress walk the query and manage tracking	
-	
-	def __str__ (self):
-		return self.latest_query
+	def parse_crash_log(self):
+		try:
+			with open("outstanding." + self.log_base, 'r') as log:
+				outstanding = json.load(log)
+			with open("running." + self.log_base, 'r') as log:
+				running = json.load(log)
+		except Exception:
+			print 'Crash file not found.  Starting fresh'
+			return False
+			
+		self.mode = outstanding['mode']
+		self.outstanding_queries = deque(outstanding.get('outstanding_queries', []))
+		for q in running['running_queries']:
+			self.launch_thread(q)
 		
 def connect_local_databases(*args):
 	global db_driver, db_host, db_port, db_user, db_pw, db_schema, sde_schema
@@ -147,7 +171,7 @@ def _validate_connection(
 		_initSQL(table)
 	db_conn.close()	
 
-def get_crawl_list (method):
+def get_crawl_list(method):
 	crawl_list = []
 	crawl_query = ''
 	if method.upper() == 'SHIP':
