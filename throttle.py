@@ -5,12 +5,20 @@ import threading
 from Queue import Queue, PriorityQueue, deque, Empty
 
 class ProgressManager(object):
-	def __init__(self, quota=zkb_scrape_limit, quota_period=zkb_quota_period):
+	def __init__(
+			self, 
+			quota=zkb_scrape_limit, 
+			quota_period=zkb_quota_period, 
+			tuning_period=zkb_tuning_period
+		):
 		assert(isinstance(quota, int))
 		if quota <= 1: raise ValueError("quota must be at least 1: ", quota)
 		self.quota = quota
 		self.quota_period = quota_period
-		self.recent_elapsed = deque([], 30)
+		tuning_samples = min(10, int(tuning_period * self.quota / self.quota_period))
+		self.recent_elapsed = deque([], tuning_samples)
+		self.recent_headroom = deque([], tuning_samples)
+		self.threads = 0
 
 		self.incoming_reports = PriorityQueue()
 		self.draining_requests = deque()
@@ -30,8 +38,34 @@ class ProgressManager(object):
 		self.wait_thread.daemon = True
 		self.wait_thread.start()
 
+	def register(self):
+		self.threads = self.threads + 1
+	
+	@property
+	def avg_headroom(self):
+		if not self.recent_headroom: return self.quota
+		return sum(self.recent_headroom) / len(self.recent_headroom)
+
+	@property
+	def avg_elapsed(self):
+		if not self.recent_elapsed: return self.quota_period / self.quota
+		return sum(self.recent_elapsed) / len(self.recent_elapsed)
+
+	@property
+	def optimal_threads(self):
+		time_remaining = self.draining_requests[-1] + self.quota_period - time.time()
+		return self.avg_elapsed * self.avg_headroom / time_remaining
+
+	def optimal_wait(self, now, headroom, elapsed):		
+		time_remaining = self.draining_requests[-1] + self.quota_period - now
+		return self.threads * time_remaining / headroom - elapsed
+
 	def request_wait(self, event, seconds):
 		if seconds > 0:
+			print "Queuing wait of {0:.4}; optimal threads: {1:.4}".format(
+				seconds,
+				self.optimal_threads
+			)
 			event.clear()
 			self.waiting_queries.put((time.time() + seconds, event))
 		else:
@@ -47,6 +81,8 @@ class ProgressManager(object):
 			self.waiting_queries.task_done()
 
 	def report(self, *args):
+		event = args[-1]
+		event.clear()
 		self.incoming_reports.put(args)
 
 	def hard_block(self, event):
@@ -56,7 +92,7 @@ class ProgressManager(object):
 	def report_thread_routine(self):
 		while True:
 			try:
-				args = self.incoming_reports.get(True, self.average_response())
+				args = self.incoming_reports.get(True, self.avg_elapsed)
 				self.do_report(*args)
 				self.incoming_reports.task_done()
 			except Empty:
@@ -79,20 +115,6 @@ class ProgressManager(object):
 		if free > 0:
 			for _ in range(min(free, len(self.blocked_queries))):
 				self.blocked_queries.pop().set()
-
-	def get_wait(self, now, requests_out, requests_queued):
-		frac_used = requests_out / self.quota
-		if frac_used >= 1.0:
-			avg_r = 0.0
-		else:
-			eps = (self.quota - requests_queued - 1) / self.quota
-			if frac_used <= 0.5: frac_used = 0.0
-			elif frac_used < eps and eps > 0.5: frac_used = (frac_used - 0.5) / (eps - 0.5)
-			else: frac_used = 1.0
-			avg_r = self.average_response()
-		
-		w = self.draining_requests[-1]
-		return frac_used * (self.quota_period + w - now) - avg_r
 
 	def rationalize_draining_queue(self, current, now, requests_queued):
 		requests_draining = len(self.draining_requests)
@@ -154,6 +176,7 @@ class ProgressManager(object):
 		# Calculate the wait and queue it
 		requests_out = len(self.draining_requests) + requests_queued
 		headroom = self.quota - max(requests_out, current)
+		self.recent_headroom.append(headroom)
 
 		if over_quota or headroom <= 0:
 			# This can happen if something drastic is different between 
@@ -161,13 +184,8 @@ class ProgressManager(object):
 			# threads and they are processing faster than average.
 			# Wait for the excess requests to drain.
 			self.hard_block(event)
-			return
-		
-		self.request_wait(event, self.get_wait(now, requests_out, requests_queued))
-
-	def average_response(self):
-		if not self.recent_elapsed: return self.quota_period / self.quota
-		return sum(self.recent_elapsed) / len(self.recent_elapsed)
+		else:
+			self.request_wait(event, self.optimal_wait(now, headroom, elapsed))
 		
 class FlowManager(object):
 	def __init__(self, max_tries=retry_limit, progress_obj=None):
@@ -175,6 +193,7 @@ class FlowManager(object):
 		self.urls = {}
 		self.throttle_event = threading.Event()
 		self.progress = progress_obj or ProgressManager()
+		self.progress.register()
 
 	def update_throttle(self, resp, emergency_over_quota=False):
 		assert(isinstance(resp, requests.Response))
@@ -194,10 +213,7 @@ class FlowManager(object):
 		self.progress.request_wait(self.throttle_event, max(rest, seconds))
 
 	def throttle(self):
-		if not self.throttle_event.is_set():
-			print "Waiting."
-			self.throttle_event.wait()
-			print "Done waiting."
+		self.throttle_event.wait()
 
 	def server_error(self, resp):
 		assert(isinstance(resp, requests.Response))

@@ -1,9 +1,11 @@
 #!/Python27/python.exe
 from __future__ import division
-import time, json, requests, _strptime # because threading
+import json, requests, _strptime # because threading
 from datetime import datetime
 from zkb_config import *
-from throttle import FlowManager
+from throttle import *
+
+_strptime.IGNORECASE
 
 try:
 #for live connections later

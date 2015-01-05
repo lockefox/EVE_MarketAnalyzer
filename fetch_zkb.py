@@ -1,16 +1,15 @@
-import sys, gzip, StringIO, sys, math, os, getopt, time, json, socket
+from __future__ import division
+import sys, time, json, _strptime
 from os import path, environ
-import urllib2
 import ConfigParser
 import pypyodbc
-from datetime import datetime, timedelta
-import zkb
+from zkb import *
+
+_strptime.IGNORECASE
 
 import itertools
 flatten = itertools.chain.from_iterable
 current_milli_time = lambda: int(round(time.time() * 1000))
-conf = ConfigParser.ConfigParser()
-conf.read(['init.ini','init_local.ini'])
 
 ####DB STUFF####
 db_host   = conf.get('GLOBALS','db_host')
@@ -34,7 +33,6 @@ zkb_base_query = conf.get('ZKB','base_query')
 default_group_mode = conf.get('ZKB','group_routine')
 
 table_headers = {}
-
 
 class Progress(object):
 	__initialized = False
