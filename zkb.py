@@ -16,22 +16,22 @@ except ImportError:
 
 log = open (logfile, 'a+')
 
-class ZKBQuery(object):
+class ZKBQueryBuilder(object):
 	Base = zkb_base_query # the URI root
 	Synonyms = zkb_synonyms # a dict of 'alternateName': 'canonicalName' pairs
 	Parameters = zkb_rest_parameters # a dict of 'parameterName': validatorFunction pairs
 	Modifiers = zkb_modifiers # a list of query parameters that don't take a value
 	Required = zkb_required # a list of query parameters which you must have at least one of (not all are required)
-			
-	def __init__ (self, startDate, queryArgs="", manager=None):
+
+	def __init__(self, queryArgs=""):
 		self.queryElements = {}
 		self.queryModifiers = set()
-		self.policy = manager or FlowManager()
-		self.startDate = dateValidator(startDate, "%Y-%m-%d")
-		self.startDateTime = datetime.strptime(self.startDate,"%Y-%m-%d")
 		self.parseQueryArgs(queryArgs)
-		self.startTime(self.startDate)
-		
+
+	def reset(self):
+		self.queryElements = {}
+		self.queryModifiers = set()
+
 	def parseQueryArgs(self, queryArgs):
 		param = None
 		for item in queryArgs.split('/'):
@@ -43,6 +43,7 @@ class ZKBQuery(object):
 			elif item:
 				param = item
 	
+		
 	def validateAndSet(self, name="", value=None):
 		name = name.replace('_', '-')
 		if name in self.Synonyms: name = self.Synonyms[name]
@@ -81,17 +82,18 @@ class ZKBQuery(object):
 				)
 			)
 		return lambda v=True: self.validateAndSet(name=name, value=v)
-		
-	def __str__(self):
-		query = [self.Base]
-		query += sorted(self.queryModifiers)
-		query += sorted(
+
+	def getQueryArgs(self):
+		query_args = sorted(self.queryModifiers)
+		query_args += sorted(
 			"{0}/{1}".format(p, v) 
 				for p, v in self.queryElements.iteritems() 
 				if v is not None
 			)
-		query.append("")
-		return "/".join(query)
+		return "/".join(query_args)
+		
+	def __str__(self):
+		return self.Base + self.getQueryArgs() + "/"
 
 	def is_valid(self):
 		params = set(self.queryElements.keys()) | self.queryModifiers
@@ -103,6 +105,14 @@ class ZKBQuery(object):
 			return str(self)
 		raise TooFewRequiredParameters(str(self), self.Required)
 
+class ZKBQuery(ZKBQueryBuilder):		
+	def __init__ (self, startDate, queryArgs="", manager=None):
+		ZKBQueryBuilder.__init__(self, queryArgs)
+		self.policy = manager or FlowManager()
+		self.startDate = dateValidator(startDate, "%Y-%m-%d")
+		self.startDateTime = datetime.strptime(self.startDate,"%Y-%m-%d")
+		self.startTime(self.startDate)
+
 	def __iter__(self):
 		while True:
 			# no try/except -- it is the responsibility of the caller to handle recovery
@@ -110,6 +120,7 @@ class ZKBQuery(object):
 			if len(single_query_JSON) == 0: break
 
 			beforeKillTime, beforeKillID = earliestKill(single_query_JSON)
+			print beforeKillTime.strftime("%Y-%m-%d %H:%M"), beforeKillID
 			# result_JSON should be == single_query_JSON
 			result_JSON = filter(
 				lambda kill: killDateTime(kill) > self.startDateTime, 
@@ -165,7 +176,7 @@ def earliestKill(kill_list):
 def fetchResults(queryObj, joined_json = []):
 	try:
 		for result in queryObj:
-			print queryObj
+			# print queryObj
 			joined_json += result
 	except:
 		print "Fatal exception, going down in flames"
@@ -202,7 +213,7 @@ def crash_recovery():
 	fetchResults(crashQuery,dump_obj)	#this isn't perfect.  Would prefer higher level control
 	
 def main():
-	newQuery2 = ZKBQuery("2014-06-01","api-only/corporationID/1894214152/")
+	newQuery2 = ZKBQuery("2013-01-01","api-only/group/25/")
 	
 	#_crash_recovery()
 	
@@ -211,9 +222,12 @@ def main():
 	#newQuery.losses
 	
 	print newQuery2
+	total = 0
+	for result in newQuery2:
+		total += len(result)
 	#print newQuery2.queryElements["beforeKillID"]
-	test_return = newQuery2.fetch()
-	print len(test_return)
+	# test_return = newQuery2.fetch()
+	print total
 	
 if __name__ == "__main__":
 	main()	

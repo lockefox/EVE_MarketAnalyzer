@@ -59,9 +59,10 @@ class ProgressManager(object):
 	def optimal_wait(self, now, headroom, elapsed):		
 		time_remaining = self.draining_requests[-1] + self.quota_period - now
 		result = self.threads * time_remaining / headroom - elapsed
-		print "headroom: {0}; quota: {1}; elapsed: {2:.4} optimal wait: {3:.4}; threads: {4}; optimal threads: {5:.4}".format(
+		print "headroom: {0}; quota: {1}; time remaining: {2:.5}; elapsed: {3:.4} optimal wait: {4:.4}; threads: {5}; optimal threads: {6:.4}".format(
 				headroom,
 				self.quota,
+				time_remaining,
 				elapsed,
 				result,
 				self.threads,
@@ -146,6 +147,7 @@ class ProgressManager(object):
 		if 0 < current < requests_draining:
 			w = self.draining_requests.pop()
 			if now - w > 60:
+				print "!!! draining old requests"
 				for _ in range(requests_draining - current):
 					self.draining_requests.pop()
 			else:
