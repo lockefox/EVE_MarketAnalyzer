@@ -236,15 +236,15 @@ class FlowManager(object):
 		assert(isinstance(resp, requests.Response))
 		tries, rest = self.urls.setdefault(resp.request.url, (0, 0.0))
 		self.urls[resp.request.url] = (tries + 1, rest)
-		if tries + 1 == max_tries or response.status_code in (406, 409):
+		if tries + 1 == self.max_tries or resp.status_code in (406, 409):
 			# 406 -- your query was bad and you should feel bad (no recovery possible)
 			# 409 -- you asked for pages > 10 and you should feel bad
 			resp.raise_for_status()
-		elif response.status_code in (403, 429) or \
-				response.headers.has_key('retry-after'):
+		elif resp.status_code in (403, 429) or \
+				resp.headers.has_key('retry-after'):
 			# You are over quota
 			self.update_throttle(resp, emergency_over_quota=True)
-		elif response.status_code in (404, 500, 502, 503, 520): 
+		elif resp.status_code in (404, 500, 502, 503, 520): 
 			# Internal server error -- probably not your fault.
 			# I mean -- 404 or 500 probably would be your fault but we checked your query
 			# before you issued it so we'll give you the benefit of the doubt.
@@ -258,6 +258,6 @@ class FlowManager(object):
 		tries, rest = self.urls.setdefault(url, (0, 0.0))
 		# simple linear backoff irrespective of exception type
 		self.urls[url] = (tries + 1, rest)
-		if tries == max_tries:
+		if tries == self.max_tries:
 			raise ex
 		self.hard_throttle(url, rest + 2.0)
