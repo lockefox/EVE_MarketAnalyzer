@@ -87,7 +87,7 @@ class ProgressManager(object):
 		else:
 			eps = (self.quota - 1) / self.quota
 			if frac_used <= 0.5: frac_used = 0.0
-			elif frac_used < one and one > 0.5: frac_used = (frac_used - 0.5) / (eps - 0.5)
+			elif frac_used < eps and eps > 0.5: frac_used = (frac_used - 0.5) / (eps - 0.5)
 			else: frac_used = 1.0
 			avg_r = self.average_response()
 		
