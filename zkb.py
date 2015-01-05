@@ -111,7 +111,9 @@ class ZKBQuery(ZKBQueryBuilder):
 		self.policy = manager or FlowManager()
 		self.startDate = dateValidator(startDate, "%Y-%m-%d")
 		self.startDateTime = datetime.strptime(self.startDate,"%Y-%m-%d")
-		self.startTime(self.startDate)
+		# if there was a startTime in queryArgs, don't overwrite it.
+		if 'startTime' not in self.queryElements:
+			self.startTime(self.startDate)
 
 	def __iter__(self):
 		while True:
