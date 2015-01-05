@@ -57,7 +57,7 @@ class ProgressManager(object):
 		while True:
 			try:
 				args = self.incoming_reports.get(True, self.average_response())
-				self.do_report(self, *args)
+				self.do_report(*args)
 				self.incoming_reports.task_done()
 			except Empty:
 				self.drain_requests(time.time(), 0)
