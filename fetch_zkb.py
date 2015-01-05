@@ -45,14 +45,18 @@ class Progress(object):
 		self.results_to_write = Queue()
 		self.threads = []
 
-		if not self.parse_crash_log(): # init object automatically
-			# get the crawl list etc
-			pass
-
 		self.results_thread = threading.Thread(target=self.results_thread_routine)
 		self.results_thread.daemon = True
 		self.results_thread.start()
-		
+
+		if not self.parse_crash_log(): # init object automatically
+			# get the crawl list etc
+			self.launch_thread() # off we go!
+
+	def wait_until_finished(self):
+		for t in self.threads:
+			t.join()
+
 	def results_thread_routine(self):
 		data_conn, data_cur, sde_conn, sde_cur = connect_local_databases()
 		mark = time.time()
@@ -63,9 +67,10 @@ class Progress(object):
 			if time.time() - mark > self.manager.tuning_period:
 				mark = time.time()
 				opt = self.manager.optimal_threads
-				while opt > len(self.threads) + 0.25:
-					print "Launching new worker thread."
-					self.launch_thread()
+				if self.outstanding_queries:
+					while opt > len(self.threads) + 0.25:
+						print "Launching new worker thread."
+						self.launch_thread()
 
 	def launch_thread(self, query=None):
 		t = threading.Thread(
@@ -82,6 +87,10 @@ class Progress(object):
 		while True:
 			with self.state_lock:
 				if query is None:
+					if not self.outstanding_queries:
+						if self.running_queries.has_key(me):
+							del self.running_queries[me]
+						return
 					query = self.outstanding_queries.pop()
 				current_query = ZKBQuery(api_fetch_limit, query, flow_manager)
 				self.running_queries[me] = current_query
@@ -416,6 +425,7 @@ def main():
 	#TODO: test if zkb API is up
 	print 'Building crash object'
 	progress = Progress()
+	progress.wait_until_finished()
 	
 	print 'Fetching zkb data'
 	####FETCH LIVE KILL DATA####
