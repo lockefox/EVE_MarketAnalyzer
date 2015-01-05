@@ -117,11 +117,11 @@ class ZKBQuery(object):
 			)
 			if len(result_JSON) == 0: break
 
+			self.beforeKillID(beforeKillID)
 			yield result_JSON
 
 			if beforeKillTime < self.startDateTime: break
 			self.policy.throttle()
-			self.beforeKillID(beforeKillID)
 		
 	def fetch(self):
 		return fetchResults(self)
@@ -202,7 +202,7 @@ def crash_recovery():
 	fetchResults(crashQuery,dump_obj)	#this isn't perfect.  Would prefer higher level control
 	
 def main():
-	newQuery2 = ZKBQuery("2014-12-27","api-only/corporationID/1894214152/")
+	newQuery2 = ZKBQuery("2014-06-01","api-only/corporationID/1894214152/")
 	
 	#_crash_recovery()
 	

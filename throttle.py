@@ -58,14 +58,19 @@ class ProgressManager(object):
 
 	def optimal_wait(self, now, headroom, elapsed):		
 		time_remaining = self.draining_requests[-1] + self.quota_period - now
-		return self.threads * time_remaining / headroom - elapsed
+		result = self.threads * time_remaining / headroom - elapsed
+		print "headroom: {0}; quota: {1}; elapsed: {2:.4} optimal wait: {3:.4}; threads: {4}; optimal threads: {5:.4}".format(
+				headroom,
+				self.quota,
+				elapsed,
+				result,
+				self.threads,
+				self.optimal_threads
+			)
+		return result
 
 	def request_wait(self, event, seconds):
 		if seconds > 0:
-			print "Queuing wait of {0:.4}; optimal threads: {1:.4}".format(
-				seconds,
-				self.optimal_threads
-			)
 			event.clear()
 			self.waiting_queries.put((time.time() + seconds, event))
 		else:
