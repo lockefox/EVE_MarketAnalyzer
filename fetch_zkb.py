@@ -49,11 +49,30 @@ class Progress(object):
 			# get the crawl list etc
 			pass
 
+		self.results_thread = threading.Thread(target=self.results_thread_routine)
+		self.results_thread.daemon = True
+		self.results_thread.start()
+		
+	def results_thread_routine(self):
+		data_conn, data_cur, sde_conn, sde_cur = connect_local_databases()
+		mark = time.time()
+		while True:
+			result = self.results_to_write.get()
+			write_kills_to_SQL(result, db_cur)
+			self.results_to_write.task_done()
+			if time.time() - mark > self.manager.tuning_period:
+				mark = time.time()
+				opt = self.manager.optimal_threads
+				while opt > len(self.threads) + 0.25:
+					print "Launching new worker thread."
+					self.launch_thread()
+
 	def launch_thread(self, query=None):
 		t = threading.Thread(
 			target=self.query_thread_routine,
 			kwargs={'query': query}
 		)
+		t.daemon = True
 		self.threads.append(t)
 		t.start()
 
@@ -281,7 +300,7 @@ def fetch_headers(table_name, db_cur):
 	table_header_str = table_header_str.rstrip(',')
 	table_headers[table_name] = table_header_str
 	
-def write_kills_to_SQL(zkb_return, db_cur, ProgressObj, debug=False):	
+def write_kills_to_SQL(zkb_return, db_cur, debug=False):	
 	fits_list = []	#all items lost in fights
 	participants_list = [] #all participants (victims and killers)
 	losses_list = []	#truncated list of just victims and destroyed 
@@ -293,8 +312,6 @@ def write_kills_to_SQL(zkb_return, db_cur, ProgressObj, debug=False):
 		base_kill_dict['solarSystemID']  = int(kill['solarSystemID'])
 		base_kill_dict['kill_time']      = kill['killTime']	#convert to datetime for writing to db?
 		base_kill_dict['totalValue']     = 'NULL'
-		
-		ProgressObj.addKillID(base_kill_dict['kill_id'])
 		
 		if 'zkb' in kill:
 			if 'totalValue' in kill['zkb']:
@@ -398,34 +415,33 @@ def main():
 	_validate_connection()
 	#TODO: test if zkb API is up
 	print 'Building crash object'
-	ProgressObj = Progress()
+	progress = Progress()
 	
-	data_conn, data_cur, sde_conn, sde_cur = connect_local_databases()
 	print 'Fetching zkb data'
 	####FETCH LIVE KILL DATA####
-	for group in ProgressObj.groups_remaining:
+	for group in progress.groups_remaining:
 		QueryObj = zkb.ZKBQuery(api_fetch_limit)
 		
 		##TODO: add multi-group scraping.  Joined group_list should work in setup below
-		if   ProgressObj.mode == 'SHIP': QueryObj.shipID(group)
-		elif ProgressObj.mode == 'GROUP': QueryObj.groupID(group)
+		if   progress.mode == 'SHIP': QueryObj.shipID(group)
+		elif progress.mode == 'GROUP': QueryObj.groupID(group)
 		else: 
 			print 'Unsupported fetch method: %s' % method.upper()
 			sys.exit(2)
 		QueryObj.api_only()
 	
-		if ProgressObj.latestKillID != 0:	#recover progress
-			QueryObj.beforeKillID(ProgressObj.latestKillID)
+		if progress.latestKillID != 0:	#recover progress
+			QueryObj.beforeKillID(progress.latestKillID)
 			
 		print 'Fetching %s' % QueryObj
 		for kill_list in QueryObj:
 			print '\t%s' % QueryObj
-			write_kills_to_SQL(kill_list,data_cur, ProgressObj,False)
-			ProgressObj.update_query(str(QueryObj))
-			ProgressObj.dump_crash_log()
-		ProgressObj.group_complete(group)	#TODO: will need to parse out CSV to list?
-		ProgressObj.latestKillID = 0
-		ProgressObj.dump_crash_log()
+			write_kills_to_SQL(kill_list, data_cur, False)
+			progress.update_query(str(QueryObj))
+			progress.dump_crash_log()
+		progress.group_complete(group)	#TODO: will need to parse out CSV to list?
+		progress.latestKillID = 0
+		progress.dump_crash_log()
 		#sys.exit(1)
 if __name__ == "__main__":
 	main()

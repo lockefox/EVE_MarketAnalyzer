@@ -15,6 +15,7 @@ class ProgressManager(object):
 		if quota <= 1: raise ValueError("quota must be at least 1: ", quota)
 		self.quota = quota
 		self.quota_period = quota_period
+		self.tuning_period = tuning_period
 		tuning_samples = min(10, int(tuning_period * self.quota / self.quota_period))
 		self.recent_elapsed = deque([], tuning_samples)
 		self.recent_headroom = deque([], tuning_samples)
