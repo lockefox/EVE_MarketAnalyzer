@@ -5,8 +5,11 @@ import threading
 from Queue import Queue, PriorityQueue, deque, Empty
 
 class ProgressManager(object):
-	def __init__(self, quota=zkb_scrape_limit):
+	def __init__(self, quota=zkb_scrape_limit, quota_period=zkb_quota_period):
+		assert(isinstance(quota, int))
+		if quota <= 1: raise ValueError("quota must be at least 1: ", quota)
 		self.quota = quota
+		self.quota_period = quota_period
 		self.recent_elapsed = deque([], 30)
 
 		self.incoming_reports = PriorityQueue()
@@ -64,7 +67,7 @@ class ProgressManager(object):
 		if self.draining_requests:
 			w = self.draining_requests.pop()
 			while True:
-				if now - w > 3600:
+				if now - w > self.quota_period:
 					if self.draining_requests:
 						w = self.draining_requests.pop()
 					else:
@@ -77,18 +80,19 @@ class ProgressManager(object):
 			for _ in range(min(free, len(self.blocked_queries))):
 				self.blocked_queries.pop().set()
 
-	def get_wait_scale(self, requests_out):
+	def get_wait(self, now, requests_out):
 		frac_used = requests_out / self.quota
 		if frac_used >= 1.0:
 			avg_r = 0.0
 		else:
-			one = (self.quota - 1) / self.quota
-			if frac_used < 0.5: frac_used = 0.0
-			elif frac_used < 0.875: frac_used = 8 * (frac_used - 0.5) / 3
-			elif frac_used < 1.0: frac_used = 1.0
-			frac_used = frac_used * one
+			eps = (self.quota - 1) / self.quota
+			if frac_used <= 0.5: frac_used = 0.0
+			elif frac_used < one and one > 0.5: frac_used = (frac_used - 0.5) / (eps - 0.5)
+			else: frac_used = 1.0
 			avg_r = self.average_response()
-		return frac_used, avg_r
+		
+		w = self.draining_requests[-1]
+		return frac_used * (self.quota_period + w - now) - avg_r
 
 	def rationalize_draining_queue(self, current, now, requests_queued):
 		requests_draining = len(self.draining_requests)
@@ -148,29 +152,20 @@ class ProgressManager(object):
 		self.rationalize_draining_queue(current, now, requests_queued)
 
 		# Calculate the wait and queue it
-		requests_draining = len(self.draining_requests)
-		requests_out = requests_draining + requests_queued
+		requests_out = len(self.draining_requests) + requests_queued
 		headroom = self.quota - max(requests_out, current)
 
-		if requests_out == 0:
-			# there should be no way for this to happen.
-			self.request_wait(event, 0.0)
-			return
-		
 		if over_quota or headroom <= 0:
 			# This can happen if something drastic is different between 
 			# the server and our record keeping. 
 			# Wait for the excess requests to drain.
 			self.hard_block(event)
 			return
-
-		frac_used, avg_r = self.get_wait_scale(requests_out)
-
-		w = self.draining_requests[-1]
-		self.request_wait(event, frac_used * (3600 + w - now) - avg_r)
+		
+		self.request_wait(event, self.get_wait(now, requests_out))
 
 	def average_response(self):
-		if not self.recent_elapsed: return 2.0
+		if not self.recent_elapsed: return self.quota_period / self.quota
 		return sum(self.recent_elapsed) / len(self.recent_elapsed)
 		
 class FlowManager(object):
@@ -207,8 +202,9 @@ class FlowManager(object):
 		assert(isinstance(resp, requests.Response))
 		tries, rest = self.urls.setdefault(resp.request.url, (0, 0.0))
 		self.urls[resp.request.url] = (tries + 1, rest)
-		if tries + 1 == max_tries or response.status_code == 406:
+		if tries + 1 == max_tries or response.status_code in (406, 409):
 			# 406 -- your query was bad and you should feel bad (no recovery possible)
+			# 409 -- you asked for pages > 10 and you should feel bad
 			resp.raise_for_status()
 		elif response.status_code in (403, 429) or \
 				response.headers.has_key('retry-after'):

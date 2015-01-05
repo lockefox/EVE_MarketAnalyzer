@@ -118,7 +118,7 @@ class ZKBQuery(object):
 			yield result_JSON
 
 			if beforeKillTime < self.startDateTime: break
-			self.policy.throttle(self.get_query())
+			self.policy.throttle()
 			self.beforeKillID(beforeKillID)
 		
 	def fetch(self):
@@ -143,7 +143,7 @@ class ZKBQuery(object):
 				self.policy.update_throttle(response)
 				return response_json
 
-			self.policy.throttle(zkb_url)
+			self.policy.throttle()
 
 def killDateTime(kill):
 	return datetime.strptime(kill["killTime"],"%Y-%m-%d %H:%M:%S")

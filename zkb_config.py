@@ -9,6 +9,7 @@ conf.read(["init.ini", "init_local.ini"])
 zkb_base_query = conf.get("ZKB","base_query")
 query_limit = int(conf.get("ZKB","query_limit"))
 zkb_scrape_limit = int(conf.get("ZKB", "zkb_scrape_limit"))
+zkb_quota_period = int(conf.get("ZKB", "zkb_quota_period"))
 subquery_limit = int(conf.get("ZKB","subquery_limit"))
 retry_limit = int(conf.get("ZKB","retry_limit"))
 default_sleep = int(conf.get("ZKB","default_sleep"))
@@ -66,6 +67,14 @@ def secondsValidator(value):
 		return str(secs)
 	raise InvalidQueryValue(value, "pastSeconds is limited to a max of 7 days.")
 
+def pageValidator(value):
+	if value is None: return None
+	pages = int(value)
+	if pages <= 10: 
+		return str(secs)
+	raise InvalidQueryValue(value, "page is usually limited to a max of 10.")
+
+
 zkb_required = (
 	"characterID", 
 	"corporationID", 
@@ -100,7 +109,6 @@ zkb_date_params = (
 
 zkb_singleton_params = (
 	'limit',
-	'page',
 	'year',
 	'month',
 	'week',
@@ -124,7 +132,8 @@ zkb_id_params = (
 
 zkb_unique_params = (
 	('orderDirection', orderValidator),
-	('pastSeconds', secondsValidator)
+	('pastSeconds', secondsValidator),
+	('page', pageValidator)
 )
 
 zkb_params = (
