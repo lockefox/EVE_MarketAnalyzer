@@ -80,12 +80,12 @@ class ProgressManager(object):
 			for _ in range(min(free, len(self.blocked_queries))):
 				self.blocked_queries.pop().set()
 
-	def get_wait(self, now, requests_out):
+	def get_wait(self, now, requests_out, requests_queued):
 		frac_used = requests_out / self.quota
 		if frac_used >= 1.0:
 			avg_r = 0.0
 		else:
-			eps = (self.quota - 1) / self.quota
+			eps = (self.quota - requests_queued - 1) / self.quota
 			if frac_used <= 0.5: frac_used = 0.0
 			elif frac_used < eps and eps > 0.5: frac_used = (frac_used - 0.5) / (eps - 0.5)
 			else: frac_used = 1.0
@@ -157,12 +157,13 @@ class ProgressManager(object):
 
 		if over_quota or headroom <= 0:
 			# This can happen if something drastic is different between 
-			# the server and our record keeping. 
+			# the server and our record keeping, or if we've got a lot of 
+			# threads and they are processing faster than average.
 			# Wait for the excess requests to drain.
 			self.hard_block(event)
 			return
 		
-		self.request_wait(event, self.get_wait(now, requests_out))
+		self.request_wait(event, self.get_wait(now, requests_out, requests_queued))
 
 	def average_response(self):
 		if not self.recent_elapsed: return self.quota_period / self.quota
