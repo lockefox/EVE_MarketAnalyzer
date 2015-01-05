@@ -93,7 +93,7 @@ class ZKBQueryBuilder(object):
 		return "/".join(query_args)
 		
 	def __str__(self):
-		return self.Base + self.getQueryArgs() + "/"
+		return self.Base + "/" + self.getQueryArgs() + "/"
 
 	def is_valid(self):
 		params = set(self.queryElements.keys()) | self.queryModifiers

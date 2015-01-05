@@ -37,7 +37,7 @@ def dateValidator(value, format="%Y%m%d%H%M"):
 
 def singletonValidator(value):
 	if value is None: return None
-	if (isinstance(value, str) and value.isdigit()) or isinstance(value, int):
+	if (isinstance(value, basestring) and value.isdigit()) or isinstance(value, int):
 		return str(value)
 	raise InvalidQueryValue(value, 'Value must be int or convertible to int.')
 
@@ -45,7 +45,7 @@ def idValidator(value):
 	if value is None: return None
 	if isinstance(value, int):
 		vlist = [value]
-	elif isinstance(value, str):
+	elif isinstance(value, basestring):
 		vlist = value.split(',')
 	elif isinstance(value, list):
 		vlist = value

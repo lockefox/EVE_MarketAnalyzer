@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{4e9b6424-03a8-470d-9526-42b62376fbd6}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>zkb.py</StartupFile>
+    <StartupFile>fetch_zkb.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>

@@ -1,5 +1,5 @@
 from __future__ import division
-import sys, time, json, _strptime
+import sys, time, json, _strptime, math
 from os import path, environ
 import ConfigParser
 import pypyodbc
@@ -35,47 +35,78 @@ default_group_mode = conf.get('ZKB','group_routine')
 table_headers = {}
 
 class Progress(object):
-	def __init__ (self, mode=default_group_mode, logfile=progress_file):
+	def __init__ (
+			self, 
+			mode=default_group_mode, 
+			logfile=progress_file, 
+			recover=True,
+			quota=zkb_scrape_limit,
+			quota_period=zkb_quota_period,
+			tuning_period=zkb_tuning_period ):
 		self.mode = mode
 		self.log_base = logfile
-		self.manager = ProgressManager()
+		self.manager = ProgressManager(quota, quota_period, tuning_period)
 		self.state_lock = threading.Lock()
 		self.outstanding_queries = deque()
 		self.running_queries = {}
 		self.results_to_write = Queue()
 		self.threads = []
 
-		self.results_thread = threading.Thread(target=self.results_thread_routine)
+		self.results_thread = threading.Thread(
+			target=self.results_thread_routine,
+			name="Progress results writer"
+		)
 		self.results_thread.daemon = True
 		self.results_thread.start()
 
-		if not self.parse_crash_log(): # init object automatically
-			# get the crawl list etc
+		if not (recover and self.parse_crash_log()): # init object automatically
+			# for testing purposes
+			self.mode = 'GROUP'
+			qb = ZKBQueryBuilder()
+			for g in (26, 27, 29, 25):
+				qb.reset()
+				qb.group(g)
+				qb.api_only()
+				self.outstanding_queries.appendleft(qb.getQueryArgs())
+
 			self.launch_thread() # off we go!
 
 	def wait_until_finished(self):
-		for t in self.threads:
-			t.join()
+		while True:
+			done = []
+			for t in self.running_queries.keys():
+				if t.is_alive(): t.join(1)
+				else: done.append(t)
+			if self.threads and len(done) == len(self.threads):
+				break
 
 	def results_thread_routine(self):
 		data_conn, data_cur, sde_conn, sde_cur = connect_local_databases()
 		mark = time.time()
 		while True:
-			result = self.results_to_write.get()
-			write_kills_to_SQL(result, db_cur)
-			self.results_to_write.task_done()
-			if time.time() - mark > self.manager.tuning_period:
+			try:
+				result = self.results_to_write.get(self.manager.avg_elapsed)
+				# write_kills_to_SQL(result, db_cur)
+				print "Skipping SQL write: {0} records".format(len(result))
+				self.results_to_write.task_done()
+			except Empty: pass
+			if time.time() - mark > self.manager.tuning_period / 10:
 				mark = time.time()
 				opt = self.manager.optimal_threads
-				if self.outstanding_queries:
-					while opt > len(self.threads) + 0.25:
-						print "Launching new worker thread."
-						self.launch_thread()
+				with self.state_lock:
+					needed = int(math.ceil(opt - 0.25) - len(self.running_queries))
+					needed = min(needed, len(self.outstanding_queries))
+				print "Need {0} new threads.".format(needed)
+				for _ in range(needed):
+					self.launch_thread()
 
 	def launch_thread(self, query=None):
+		id = len(self.threads)
+		running = len(self.running_queries)
 		t = threading.Thread(
 			target=self.query_thread_routine,
-			kwargs={'query': query}
+			kwargs={'query': query},
+			name="Query thread #{0} ({1} running)".format(id, running)
 		)
 		t.daemon = True
 		self.threads.append(t)
@@ -87,7 +118,8 @@ class Progress(object):
 		while True:
 			with self.state_lock:
 				if query is None:
-					if not self.outstanding_queries:
+					if (not self.outstanding_queries or 
+			 				1 < len(self.threads) > self.manager.optimal_threads + 1.25):
 						if self.running_queries.has_key(me):
 							del self.running_queries[me]
 						return
@@ -101,7 +133,7 @@ class Progress(object):
 			query = None
 
 	def dump_running(self):
-		with self.state_lock():
+		with self.state_lock:
 			running = {}
 			running['running_queries'] = [
 				q.getQueryArgs() 
@@ -156,6 +188,7 @@ class Progress(object):
 		self.outstanding_queries = deque(outstanding.get('outstanding_queries', []))
 		for q in running['running_queries']:
 			self.launch_thread(q)
+		return True
 		
 def connect_local_databases(*args):
 	global db_driver, db_host, db_port, db_user, db_pw, db_schema, sde_schema
@@ -419,7 +452,12 @@ def write_kills_to_SQL(zkb_return, db_cur, debug=False):
 		#-------------------#
 	if debug: print losses_commit_str
 	db_cur.execute(losses_commit_str).commit()
-	
+
+def test():
+	progress = Progress()
+	progress.wait_until_finished()
+
+
 def main():
 	_validate_connection()
 	#TODO: test if zkb API is up
@@ -454,4 +492,4 @@ def main():
 		progress.dump_crash_log()
 		#sys.exit(1)
 if __name__ == "__main__":
-	main()
+	test()

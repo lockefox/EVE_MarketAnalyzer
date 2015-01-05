@@ -16,7 +16,10 @@ class ProgressManager(object):
 		self.quota = quota
 		self.quota_period = quota_period
 		self.tuning_period = tuning_period
-		tuning_samples = min(10, int(tuning_period * self.quota / self.quota_period))
+
+		self.avg_elapsed = self.quota_period / self.quota
+		self.avg_headroom = self.quota
+		tuning_samples = max(10, int(tuning_period * self.quota / self.quota_period))
 		self.recent_elapsed = deque([], tuning_samples)
 		self.recent_headroom = deque([], tuning_samples)
 		self.threads = 0
@@ -42,19 +45,23 @@ class ProgressManager(object):
 	def register(self):
 		self.threads = self.threads + 1
 	
-	@property
-	def avg_headroom(self):
-		if not self.recent_headroom: return self.quota
-		return sum(self.recent_headroom) / len(self.recent_headroom)
+	def update_avg_headroom(self):
+		if not self.recent_headroom: result = self.quota
+		else: result = sum(self.recent_headroom) / len(self.recent_headroom)
+		self.avg_headroom = result
+		return result
 
-	@property
-	def avg_elapsed(self):
-		if not self.recent_elapsed: return self.quota_period / self.quota
-		return sum(self.recent_elapsed) / len(self.recent_elapsed)
+	def update_avg_elapsed(self):
+		if not self.recent_elapsed: result = self.quota_period / self.quota
+		else: result = sum(self.recent_elapsed) / len(self.recent_elapsed)
+		self.avg_elapsed = result
+		return result
 
 	@property
 	def optimal_threads(self):
-		time_remaining = self.draining_requests[-1] + self.quota_period - time.time()
+		now = time.time()
+		next = now if not self.draining_requests else self.draining_requests[-1]
+		time_remaining = self.quota_period + next - now
 		return self.avg_elapsed * self.avg_headroom / time_remaining
 
 	def optimal_wait(self, now, headroom, elapsed):		
@@ -101,6 +108,8 @@ class ProgressManager(object):
 			try:
 				args = self.incoming_reports.get(True, self.avg_elapsed)
 				self.do_report(*args)
+				self.update_avg_elapsed()
+				self.update_avg_headroom()
 				self.incoming_reports.task_done()
 			except Empty:
 				self.drain_requests(time.time(), 0)
@@ -246,7 +255,7 @@ class FlowManager(object):
 
 	def transport_exception(self, url, ex):
 		assert(isinstance(ex, Exception))
-		tries, rest = self.urls.setdefault(resp.request.url, (0, 0.0))
+		tries, rest = self.urls.setdefault(url, (0, 0.0))
 		# simple linear backoff irrespective of exception type
 		self.urls[url] = (tries + 1, rest)
 		if tries == max_tries:
