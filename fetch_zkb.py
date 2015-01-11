@@ -61,12 +61,15 @@ class Progress(object):
 
 		if not (recover and self.parse_crash_log()): # init object automatically
 			# for testing purposes
-			self.mode = 'GROUP'
 			qb = ZKBQueryBuilder()
-			for g in (26, 27, 29, 25):
+			for g in get_crawl_list(self.mode):
+				print "Adding %s type %d" % (self.mode, g)
 				qb.reset()
-				qb.group(g)
+				if self.mode.upper() == "GROUP": qb.group(g)
+				else: qb.ship(g)
+
 				qb.api_only()
+				print qb.get_query()
 				self.outstanding_queries.appendleft(qb.getQueryArgs())
 
 			self.launch_thread() # off we go!
@@ -86,8 +89,8 @@ class Progress(object):
 		while True:
 			try:
 				result = self.results_to_write.get(self.manager.avg_elapsed)
-				# write_kills_to_SQL(result, db_cur)
-				print "Skipping SQL write: {0} records".format(len(result))
+				write_kills_to_SQL(result, data_cur)
+				# print "Skipping SQL write: {0} records".format(len(result))
 				self.results_to_write.task_done()
 			except Empty: pass
 			if time.time() - mark > self.manager.tuning_period / 10:
@@ -248,8 +251,7 @@ def get_crawl_list(method):
 			WHERE categoryid = 6
 			'''
 	else:
-		print 'Unsupported fetch method: %s' % method.upper()
-		sys.exit(2)
+		raise InvalidQueryValue(method, 'Supported values are "ship" and "group".')
 	
 	data_conn, data_cur, sde_conn, sde_cur = connect_local_databases() #connect to SDE
 	
@@ -353,12 +355,8 @@ def write_kills_to_SQL(zkb_return, db_cur, debug=False):
 		base_kill_dict['kill_id']       = int(kill['killID'])
 		base_kill_dict['solarSystemID']  = int(kill['solarSystemID'])
 		base_kill_dict['kill_time']      = kill['killTime']	#convert to datetime for writing to db?
-		base_kill_dict['totalValue']     = 'NULL'
-		
-		if 'zkb' in kill:
-			if 'totalValue' in kill['zkb']:
-				if int(float(kill['zkb']['totalValue'])) != 0:
-					base_kill_dict['totalValue'] = float(kill['zkb']['totalValue']) 
+		v = float(kill.get('zkb', {}).get('totalValue', '0.0'))
+		base_kill_dict['totalValue']     = v if v > 0.0 else 'NULL'	
 					
 		base_kill_dict['shipTypeID']     = int(kill['victim']['shipTypeID'])
 		##PARSE VICTIM##
@@ -373,13 +371,10 @@ def write_kills_to_SQL(zkb_return, db_cur, debug=False):
 			tmp_commit_str = build_commit_str_fits(item_list, base_kill_dict)
 			fits_list.append(tmp_commit_str)
 		
-		victim_allianceID = 'NULL'
-		if int(kill['victim']['allianceID']) != 0:
-			victim_allianceID = int(kill['victim']['allianceID'])
-			
-		victim_factionID = 'NULL'
-		if int(kill['victim']['factionID']) != 0:
-			victim_factionID = int(kill['victim']['factionID'])
+		v = int(kill['victim'].get('allianceID', 0))
+		victim_allianceID = v if v <> 0 else 'NULL'
+		v = int(kill['victim'].get('factionID', 0))			
+		victim_factionID = v if v <> 0 else 'NULL'
 			
 		losses_str = '''(%s,%s,'%s',%s,%s,%s,%s,%s,%s,%s,%s)'''%(\
 			base_kill_dict['kill_id'],\
@@ -395,101 +390,36 @@ def write_kills_to_SQL(zkb_return, db_cur, debug=False):
 			len(kill['attackers']))
 			
 		losses_list.append(losses_str)
-	
-####WRITE PARTICIPANTS TABLE####
-	if zkb_participants not in table_headers:
-		fetch_headers(zkb_participants, db_cur)
-	
-	participants_commit_str = '''INSERT INTO %s (%s) VALUES''' % (zkb_participants,table_headers[zkb_participants])
-	
-	for participant_str in participants_list:
-		participants_commit_str = '%s %s,' % (participants_commit_str,participant_str)
-	
-	participants_commit_str = participants_commit_str.rstrip(',')
+
+	def write_to_table(table_name, data_list):
+		if table_name not in table_headers:
+			fetch_headers(table_name, db_cur)
+		
+		commit_preface = 'INSERT INTO {table} ({headers}) VALUES'.format(table=table_name, headers=table_headers[table_name])
+		commit_list = ', '.join(data_list)
+		
 		#DUPLICATE OVERWRITE#
-	participants_duplicate = '''ON DUPLICATE KEY UPDATE''' #TODO: figure out a dynamic way to use duplicate key lookup
-	for header in table_headers[zkb_participants].split(','):
-		participants_duplicate = '%s %s=%s,' % (participants_duplicate, header, header)
-	participants_commit_str = '%s %s' % (participants_commit_str, participants_duplicate.rstrip(','))
+		duplicate_preface = 'ON DUPLICATE KEY UPDATE' #TODO: figure out a dynamic way to use duplicate key lookup
+		duplicate_list = ', '.join('{0}={0}'.format(header) for header in table_headers[table_name].split(','))
+		
+		to_commit_str = ' '.join([commit_preface, commit_list, duplicate_preface, duplicate_list])
 		#-------------------#
-	if debug: print participants_commit_str
-	db_cur.execute(participants_commit_str).commit()	
+		if debug: print to_commit_str
+		db_cur.execute(to_commit_str).commit()
+
+####WRITE PARTICIPANTS TABLE####
+	write_to_table(zkb_participants, participants_list)	
 	
 ####WRITE FITS TABLE####
-	if zkb_fits not in table_headers:
-		fetch_headers(zkb_fits, db_cur)
-		
-	fits_commit_str = '''INSERT INTO %s (%s) VALUES''' % (zkb_fits, table_headers[zkb_fits])
-	
-	for fits_str in fits_list:
-		fits_commit_str = '%s %s,' % (fits_commit_str, fits_str)
-		
-	fits_commit_str = fits_commit_str.rstrip(',')
-		#DUPLICATE OVERWRITE#
-	fits_duplicate = '''ON DUPLICATE KEY UPDATE''' #TODO: figure out a dynamic way to use duplicate key lookup
-	for header in table_headers[zkb_fits].split(','):
-		fits_duplicate = '%s %s=%s,' % (fits_duplicate, header, header)
-	fits_commit_str = '%s %s' % (fits_commit_str, fits_duplicate.rstrip(','))
-		#-------------------#
-	if debug: print fits_commit_str
-	db_cur.execute(fits_commit_str).commit()
+	write_to_table(zkb_fits, fits_list)	
 
 ####WRITE LOSSES TABLE####
-	if zkb_trunc_stats not in table_headers:
-		fetch_headers(zkb_trunc_stats, db_cur)
-		
-	losses_commit_str = '''INSERT INTO %s (%s) VALUES''' % (zkb_trunc_stats, table_headers[zkb_trunc_stats])
-	
-	for losses_str in losses_list:
-		losses_commit_str = '%s %s,' % (losses_commit_str, losses_str)
-		
-	losses_commit_str = losses_commit_str.rstrip(',')
-		#DUPLICATE OVERWRITE#
-	losses_duplicate = '''ON DUPLICATE KEY UPDATE''' #TODO: figure out a dynamic way to use duplicate key lookup
-	for header in table_headers[zkb_trunc_stats].split(','):
-		losses_duplicate = '%s %s=%s,' % (losses_duplicate, header, header)
-	losses_commit_str = '%s %s' % (losses_commit_str, losses_duplicate.rstrip(','))
-		#-------------------#
-	if debug: print losses_commit_str
-	db_cur.execute(losses_commit_str).commit()
-
-def test():
-	progress = Progress()
-	progress.wait_until_finished()
-
+	write_to_table(zkb_trunc_stats, losses_list)
 
 def main():
 	_validate_connection()
-	#TODO: test if zkb API is up
-	print 'Building crash object'
-	progress = Progress()
+	progress = Progress(mode='ship')
 	progress.wait_until_finished()
-	
-	print 'Fetching zkb data'
-	####FETCH LIVE KILL DATA####
-	for group in progress.groups_remaining:
-		QueryObj = zkb.ZKBQuery(api_fetch_limit)
-		
-		##TODO: add multi-group scraping.  Joined group_list should work in setup below
-		if   progress.mode == 'SHIP': QueryObj.shipID(group)
-		elif progress.mode == 'GROUP': QueryObj.groupID(group)
-		else: 
-			print 'Unsupported fetch method: %s' % method.upper()
-			sys.exit(2)
-		QueryObj.api_only()
-	
-		if progress.latestKillID != 0:	#recover progress
-			QueryObj.beforeKillID(progress.latestKillID)
-			
-		print 'Fetching %s' % QueryObj
-		for kill_list in QueryObj:
-			print '\t%s' % QueryObj
-			write_kills_to_SQL(kill_list, data_cur, False)
-			progress.update_query(str(QueryObj))
-			progress.dump_crash_log()
-		progress.group_complete(group)	#TODO: will need to parse out CSV to list?
-		progress.latestKillID = 0
-		progress.dump_crash_log()
-		#sys.exit(1)
+
 if __name__ == "__main__":
-	test()
+	main()

@@ -6,7 +6,8 @@
     <ProjectGuid>{4e9b6424-03a8-470d-9526-42b62376fbd6}</ProjectGuid>
     <ProjectHome />
     <StartupFile>fetch_zkb.py</StartupFile>
-    <SearchPath />
+    <SearchPath>
+    </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
@@ -37,6 +38,9 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="fetch_zkb.py" />
+    <Compile Include="gui.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="rpy_test.py" />
     <Compile Include="stat_script.py" />
     <Compile Include="throttle.py">

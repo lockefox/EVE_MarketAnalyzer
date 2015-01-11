@@ -122,12 +122,13 @@ class ZKBQuery(ZKBQueryBuilder):
 			if len(single_query_JSON) == 0: break
 
 			beforeKillTime, beforeKillID = earliestKill(single_query_JSON)
-			print beforeKillTime.strftime("%Y-%m-%d %H:%M"), beforeKillID
 			# result_JSON should be == single_query_JSON
 			result_JSON = filter(
 				lambda kill: killDateTime(kill) > self.startDateTime, 
 				single_query_JSON
 			)
+			print "{0} records: {1} {2}".format(len(result_JSON), beforeKillTime.strftime("%Y-%m-%d %H:%M"), beforeKillID)
+
 			if len(result_JSON) == 0: break
 
 			self.beforeKillID(beforeKillID)
