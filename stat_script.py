@@ -18,15 +18,11 @@ from scipy.stats import norm
 
 from ema_config import *
 
-MACD_SHORT = 12
-MACD_LONG = 26
-
 global V
 
 localdir = "C:\Users\John\Dropbox\EMA"
 
-basedir = localdir if os.path.exists(localdir) else "."
-plot_location_template = "{basedir}/{plots}/{date}/{flag_group}" # also available: {itemid}, {regionid}
+basedir = localdir if os.path.exists(localdir) else ""
 
 class AttrLogger(object):
 	def __init__(self):
@@ -88,49 +84,31 @@ def fetch_market_data(days=366, window=15, region=10000002, debug=global_debug):
 
 	raw_data_filled.fillna({'volume':0}, inplace=True)
 
-	raw_data_filled['avgprice_int'] = \
+	raw_data_filled['price_delta_sma'] = \
 		raw_data_filled \
 		.groupby('itemid') \
 		.avgprice \
 		.apply(
-			lambda x: 
+			lambda x: x - pd.rolling_mean(
 				x.interpolate()
-				 .fillna(method='bfill')
-		 )
-
-	raw_data_filled['price_delta_sma'] = \
-		raw_data_filled \
-		.groupby('itemid') \
-		.avgprice_int \
-		.apply(lambda x: x - pd.rolling_mean(x, window))
+				 .fillna(method='bfill'),
+				window
+				)
+			)
 
 	# raw_data_filled['price_delta_sma2'] = raw_data_filled['price_delta_sma'] ** 2
 
 	raw_data_filled['price_delta_smm'] = \
 		raw_data_filled \
 		.groupby('itemid') \
-		.avgprice_int \
-		.apply(lambda x: x - pd.rolling_median(x, window))
-
-	global MACD_SHORT, MACD_LONG
-	def macd(x, short=MACD_SHORT, long=MACD_LONG):
-		short_ema = pd.ewma(x, span=short)
-		long_ema = pd.ewma(x, span=long)
-		return short_ema - long_ema
-
-	raw_data_filled['macd'] = \
-		raw_data_filled \
-		.groupby('itemid') \
-		.avgprice_int \
-		.apply(macd)
-
-	raw_data_filled['macd_trend'] = \
-		raw_data_filled \
-		.groupby('itemid') \
-		.macd \
-		.apply(lambda x: pd.ewma(x, span=9))
-
-	raw_data_filled['macd_flags'] = raw_data_filled.macd - raw_data_filled.macd_trend
+		.avgprice \
+		.apply(
+			lambda x: x - pd.rolling_median(
+				x.interpolate()
+				 .fillna(method='bfill'),
+				window
+				)
+			)
 
 	V.raw_data_filled = raw_data_filled
 	# raw_data_filled['price_delta_smm2'] = raw_data_filled['price_delta_smm'] ** 2 
@@ -275,8 +253,8 @@ def sigma_report(
 
 	return vol_flagged, price_flagged
 
-def fetch_and_plot(data_struct, flag_group, flag_details, TA_args = "", region=10000002):
-	global R_configured, basedir, plot_location_template
+def fetch_and_plot(data_struct, which_flags, TA_args = "", region=10000002):
+	global R_configured, basedir
 	if not R_configured:
 		print 'Setting up R libraries'
 		importr('jsonlite')
@@ -288,18 +266,12 @@ def fetch_and_plot(data_struct, flag_group, flag_details, TA_args = "", region=1
 		R_configured = True
 
 	print 'setting up dump path'
-	out_dir = plot_location_template.format(
-		basedir=basedir, 
-		plots='plots', 
-		date=today, 
-		flag_group=flag_group,
-		regionid=region
-		)
+	out_dir = os.path.join(basedir, 'plots', today, which_flags)
 	if not os.path.exists(out_dir):
 		os.makedirs(out_dir)
 	
 	for group, item_list in data_struct.iteritems():
-		dump_path = os.path.join(basedir, 'plots', today, flag_group, group).replace("\\","/")
+		dump_path = os.path.join(basedir, 'plots', today, which_flags, group).replace("\\","/")
 		print dump_path
 		if not os.path.exists(dump_path):
 			os.makedirs(dump_path)
@@ -413,9 +385,16 @@ def main(region):
 		index_col=['itemid']
 		)
 	V.convert = convert
+	
+	#print 'Plotting Forced Group'
+	#R_config_file = open(conf.get('STATS','R_config_file'),'r')
+	#R_todo = json.load(R_config_file)
+	#fetch_and_plot(R_todo['forced_plots'], 'forced', ";addRSI();addLines(h=30, on=4);addLines(h=70, on=4)",region=region)
+	#robjects.r("close(emd)")
+	#sys.exit(0)
+	
 	market_data_groups = fetch_market_data(region=region)
 	V.market_data_groups = market_data_groups
-	return
 	market_sigmas = crunch_market_stats(market_data_groups, report_sigmas, filter_sigmas, region=region)
 	V.market_sigmas = market_sigmas
 	data_groups = market_data_groups
@@ -519,13 +498,11 @@ def hist_compare(itemid, desired=['price_delta_smm','price_delta_sma']):
 	)
 
 if __name__ == "__main__":
-	main('10000002')
-	if False:
-		import multiprocessing
-		procs = []
-		regions = trunc_region_list.keys()
-		p = multiprocessing.Pool(len(regions))
-		p.map(main, regions)
+	import multiprocessing
+	procs = []
+	regions = trunc_region_list.keys()
+	p = multiprocessing.Pool(len(regions))
+	p.map(main, regions)
 
 # 30633 = wrecked weapon subroutines
 # 12801 = Javelin M
