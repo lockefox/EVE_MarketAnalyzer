@@ -241,7 +241,7 @@ class FlowManager(object):
 			# 409 -- you asked for pages > 10 and you should feel bad
 			resp.raise_for_status()
 		elif resp.status_code in (403, 429) or \
-				resp.headers.has_key('retry-after'):
+				'retry-after' in resp.headers:
 			# You are over quota
 			self.update_throttle(resp, emergency_over_quota=True)
 		elif resp.status_code in (404, 500, 502, 503, 520): 
