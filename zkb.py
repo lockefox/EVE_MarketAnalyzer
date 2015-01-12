@@ -153,6 +153,9 @@ class ZKBQuery(ZKBQueryBuilder):
 			except requests.HTTPError:
 				# this came from server_error.
 				raise
+			except ZkbServerException:
+				# This is a failure but we're going to retry.
+				pass
 			except Exception as e:
 				self.policy.transport_exception(zkb_url, e)
 			else:

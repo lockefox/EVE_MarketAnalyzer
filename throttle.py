@@ -19,9 +19,11 @@ class ProgressManager(object):
 
 		self.avg_elapsed = self.quota_period / self.quota
 		self.avg_headroom = self.quota
+		self.avg_wait = 0.0
 		tuning_samples = max(10, int(tuning_period * self.quota / self.quota_period))
 		self.recent_elapsed = deque([], tuning_samples)
 		self.recent_headroom = deque([], tuning_samples)
+		self.recent_waits = deque([], tuning_samples)
 		self.threads = 0
 
 		self.incoming_reports = PriorityQueue()
@@ -57,6 +59,17 @@ class ProgressManager(object):
 		self.avg_elapsed = result
 		return result
 
+	def update_avg_wait(self):
+		if not self.recent_waits: result = 0.0
+		else: result = sum(self.recent_waits) / len(self.recent_waits)
+		self.avg_wait = result
+		return result
+
+	def update_avgs(self):
+		self.update_avg_elapsed()
+		self.update_avg_headroom()
+		self.update_avg_wait()
+
 	@property
 	def optimal_threads(self):
 		now = time.time()
@@ -64,15 +77,17 @@ class ProgressManager(object):
 		time_remaining = self.quota_period + next - now
 		return self.avg_elapsed * self.avg_headroom / time_remaining
 
-	def optimal_wait(self, now, headroom, elapsed):		
+	def optimal_wait(self, now, headroom, elapsed, use_avg=True):
+		elapsed = self.avg_elapsed if use_avg else elapsed
 		time_remaining = self.draining_requests[-1] + self.quota_period - now
 		result = self.threads * time_remaining / headroom - elapsed
-		print "headroom: {0}; quota: {1}; time remaining: {2:.5}; elapsed: {3:.4} optimal wait: {4:.4}; threads: {5}; optimal threads: {6:.4}".format(
+		print "headroom: {0}; quota: {1}; time remaining: {2:.5}; elapsed: {3:.4} optimal wait: {4:.4}; avg wait: {5:.4}; threads: {6}; optimal threads: {7:.4}".format(
 				headroom,
 				self.quota,
 				time_remaining,
 				elapsed,
 				result,
+				self.avg_wait,
 				self.threads,
 				self.optimal_threads
 			)
@@ -108,8 +123,7 @@ class ProgressManager(object):
 			try:
 				args = self.incoming_reports.get(True, self.avg_elapsed)
 				self.do_report(*args)
-				self.update_avg_elapsed()
-				self.update_avg_headroom()
+				self.update_avgs()
 				self.incoming_reports.task_done()
 			except Empty:
 				self.drain_requests(time.time(), 0)
@@ -157,7 +171,7 @@ class ProgressManager(object):
 		if 0 < current < requests_draining:
 			w = self.draining_requests.pop()
 			if now - w > 60:
-				print "!!! draining old requests"
+				print "!!! draining %s old requests" % (requests_draining - current)
 				for _ in range(requests_draining - current):
 					self.draining_requests.pop()
 			else:
@@ -202,7 +216,9 @@ class ProgressManager(object):
 			# Wait for the excess requests to drain.
 			self.hard_block(event)
 		else:
-			self.request_wait(event, self.optimal_wait(now, headroom, elapsed))
+			w = self.optimal_wait(now, headroom, elapsed)
+			self.recent_waits.append(w)
+			self.request_wait(event, w)
 		
 class FlowManager(object):
 	def __init__(self, max_tries=retry_limit, progress_obj=None):
@@ -252,6 +268,7 @@ class FlowManager(object):
 		else: 
 			# God only knows -- let's see if someone else can make sense of the problem
 			self.update_throttle(resp)
+		raise ZkbServerException(resp.status_code)
 
 	def transport_exception(self, url, ex):
 		assert(isinstance(ex, Exception))

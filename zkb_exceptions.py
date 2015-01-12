@@ -1,5 +1,9 @@
 from exceptions import Exception
 
+class ZkbServerException(Exception):
+	def __init__(self, status):
+		Exception.__init__(self, "Kill server returned status: %s" % status)
+
 class QueryException(Exception):
 	def __init__(self, msg="Useless generic Exception"):
 		Exception.__init__(self, msg)

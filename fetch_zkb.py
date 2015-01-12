@@ -42,9 +42,12 @@ class Progress(object):
 			recover=True,
 			quota=zkb_scrape_limit,
 			quota_period=zkb_quota_period,
-			tuning_period=zkb_tuning_period ):
+			tuning_period=zkb_tuning_period,
+			max_start_threads=4,
+			max_threads=10 ):
 		self.mode = mode
 		self.log_base = logfile
+		self.max_threads = 10
 		self.manager = ProgressManager(quota, quota_period, tuning_period)
 		self.state_lock = threading.Lock()
 		self.outstanding_queries = deque()
@@ -59,7 +62,7 @@ class Progress(object):
 		self.results_thread.daemon = True
 		self.results_thread.start()
 
-		if not (recover and self.parse_crash_log()): # init object automatically
+		if not (recover and self.parse_crash_log(max_start_threads)): # init object automatically
 			# for testing purposes
 			qb = ZKBQueryBuilder()
 			for g in get_crawl_list(self.mode):
@@ -93,9 +96,10 @@ class Progress(object):
 				# print "Skipping SQL write: {0} records".format(len(result))
 				self.results_to_write.task_done()
 			except Empty: pass
-			if time.time() - mark > self.manager.tuning_period / 10:
+			if time.time() - mark > self.manager.tuning_period:
 				mark = time.time()
-				opt = self.manager.optimal_threads
+				opt = self.manager.optimal_threads if self.manager.avg_wait < 0 else self.manager.threads
+				opt = min(opt, self.max_threads)
 				with self.state_lock:
 					needed = int(math.ceil(opt - 0.25) - len(self.running_queries))
 					needed = min(needed, len(self.outstanding_queries))
@@ -177,7 +181,7 @@ class Progress(object):
 						separators=(',',': ')
 					)
 		
-	def parse_crash_log(self):
+	def parse_crash_log(self, max_threads):
 		try:
 			with open("outstanding." + self.log_base, 'r') as log:
 				outstanding = json.load(log)
@@ -189,8 +193,12 @@ class Progress(object):
 			
 		self.mode = outstanding['mode']
 		self.outstanding_queries = deque(outstanding.get('outstanding_queries', []))
-		for q in running['running_queries']:
-			self.launch_thread(q)
+		for i, q in enumerate(running['running_queries']):
+			if i < max(max_threads, 1):
+				print "Launching recovery thread:", q
+				self.launch_thread(q)
+			else:
+				self.outstanding_queries.append(q)
 		return True
 		
 def connect_local_databases(*args):
