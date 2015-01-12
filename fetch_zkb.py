@@ -47,7 +47,7 @@ class Progress(object):
 			max_threads=20):
 		self.mode = mode
 		self.log_base = logfile
-		self.max_threads = 10
+		self.max_threads = max_threads
 		self.manager = ProgressManager(quota, quota_period, tuning_period)
 		self.state_lock = threading.Lock()
 		self.outstanding_queries = deque()
