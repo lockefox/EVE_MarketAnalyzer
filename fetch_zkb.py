@@ -98,16 +98,16 @@ class Progress(object):
 			except Empty: pass
 			if time.time() - mark > self.manager.tuning_period:
 				mark = time.time()
-				expected_wait = self.manager.avg_elapsed - (self.manager.quota_period * len(self.running_queries) / self.manager.quota)
-				if 0 < self.manager.avg_wait > expected_wait:
+				with self.state_lock:
+					running = len(self.running_queries)
+					outstanding = len(self.outstanding_queries)
+				expected_wait = self.manager.avg_elapsed - (self.manager.quota_period * running / self.manager.quota)
+				if running >= self.max_threads or self.manager.avg_wait > expected_wait > 0:
 					needed = 0
 				else:
-					opt = min(self.manager.optimal_threads, self.max_threads)
-					if opt >= self.running_queries: needed = 0
-					else: 
-						with self.state_lock:
-							needed = int(math.ceil(opt - 0.25) - len(self.running_queries))
-							needed = int(math.ceil(min(needed, len(self.outstanding_queries)) / 2))
+					opt = self.manager.optimal_threads
+					needed = int(math.ceil(opt - 0.25) - running)
+					needed = int(math.ceil(min(needed, outstanding) / 2))
 				print "Need {0} new threads.".format(needed)
 				for _ in range(needed):
 					self.launch_thread()
@@ -123,7 +123,7 @@ class Progress(object):
 			)
 			t.daemon = True
 			self.threads.append(t)
-			t.start()
+		t.start()
 
 	def query_thread_routine(self, query=None):
 		flow_manager = FlowManager(progress_obj=self.manager)
