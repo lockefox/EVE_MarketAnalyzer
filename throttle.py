@@ -46,6 +46,9 @@ class ProgressManager(object):
 
 	def register(self):
 		self.threads = self.threads + 1
+
+	def unregister(self):
+		self.threads = self.threads - 1
 	
 	def update_avg_headroom(self):
 		if not self.recent_headroom: result = self.quota

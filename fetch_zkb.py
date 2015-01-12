@@ -131,6 +131,7 @@ class Progress(object):
 			 				1 < len(self.threads) > self.manager.optimal_threads + 1.25):
 						if self.running_queries.has_key(me):
 							del self.running_queries[me]
+						flow_manager.progress.unregister()
 						return
 					query = self.outstanding_queries.pop()
 				current_query = ZKBQuery(api_fetch_limit, query, flow_manager)
