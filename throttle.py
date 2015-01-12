@@ -20,10 +20,9 @@ class ProgressManager(object):
 		self.avg_elapsed = self.quota_period / self.quota
 		self.avg_headroom = self.quota
 		self.avg_wait = 0.0
-		tuning_samples = max(10, int(tuning_period * self.quota / self.quota_period))
-		self.recent_elapsed = deque([], tuning_samples)
-		self.recent_headroom = deque([], tuning_samples)
-		self.recent_waits = deque([], tuning_samples)
+		self.recent_elapsed = deque([], self.samples_per_thread)
+		self.recent_headroom = deque([], self.samples_per_thread)
+		self.recent_waits = deque([], self.samples_per_thread)
 		self.threads = 0
 		self.need_expand = False
 
@@ -45,8 +44,13 @@ class ProgressManager(object):
 		self.wait_thread.daemon = True
 		self.wait_thread.start()
 
+	@property
+	def samples_per_thread(self):
+		return max(10, int(self.tuning_period * self.quota / self.quota_period))
+
 	def expand(self):
-		tuning_samples = self.threads * max(10, int(tuning_period * self.quota / self.quota_period))
+		tuning_samples = self.threads * self.samples_per_thread
+		if tuning_samples == self.recent_elapsed.maxlen: return
 		self.recent_elapsed = deque(self.recent_elapsed, tuning_samples)
 		self.recent_headroom = deque(self.recent_headroom, tuning_samples)
 		self.recent_waits = deque(self.recent_waits, tuning_samples)
