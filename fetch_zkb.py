@@ -110,16 +110,17 @@ class Progress(object):
 						self.launch_thread()
 
 	def launch_thread(self, query=None):
-		id = len(self.threads)
-		running = len(self.running_queries)
-		t = threading.Thread(
-			target=self.query_thread_routine,
-			kwargs={'query': query},
-			name="Query thread #{0} ({1} running)".format(id, running)
-		)
-		t.daemon = True
-		self.threads.append(t)
-		t.start()
+		with self.state_lock:
+			id = len(self.threads)
+			running = len(self.running_queries)
+			t = threading.Thread(
+				target=self.query_thread_routine,
+				kwargs={'query': query},
+				name="Query thread #{0} ({1} running)".format(id, running)
+			)
+			t.daemon = True
+			self.threads.append(t)
+			t.start()
 
 	def query_thread_routine(self, query=None):
 		flow_manager = FlowManager(progress_obj=self.manager)
