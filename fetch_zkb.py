@@ -102,13 +102,15 @@ class Progress(object):
 				if 0 < self.manager.avg_wait > expected_wait:
 					needed = 0
 				else:
-					opt = max(self.manager.optimal_threads, self.max_threads)
-					with self.state_lock:
-						needed = int(math.ceil(opt - 0.25) - len(self.running_queries))
-						needed = int(math.ceil(min(needed, len(self.outstanding_queries)) / 2))
-					print "Need {0} new threads.".format(needed)
-					for _ in range(needed):
-						self.launch_thread()
+					opt = min(self.manager.optimal_threads, self.max_threads)
+					if opt >= self.running_queries: needed = 0
+					else: 
+						with self.state_lock:
+							needed = int(math.ceil(opt - 0.25) - len(self.running_queries))
+							needed = int(math.ceil(min(needed, len(self.outstanding_queries)) / 2))
+				print "Need {0} new threads.".format(needed)
+				for _ in range(needed):
+					self.launch_thread()
 
 	def launch_thread(self, query=None):
 		with self.state_lock:
@@ -198,11 +200,12 @@ class Progress(object):
 			
 		self.mode = outstanding['mode']
 		self.outstanding_queries = deque(outstanding.get('outstanding_queries', []))
-		for i, q in enumerate(running['running_queries']):
+		for i, q in enumerate(sorted(running['running_queries'])):
 			if i < max(max_threads, 1):
 				print "Launching recovery thread:", q
 				self.launch_thread(q)
 			else:
+				print "Queueing recovery thread:", q
 				self.outstanding_queries.append(q)
 		return True
 		
