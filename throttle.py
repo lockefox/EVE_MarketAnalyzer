@@ -25,6 +25,7 @@ class ProgressManager(object):
 		self.recent_headroom = deque([], tuning_samples)
 		self.recent_waits = deque([], tuning_samples)
 		self.threads = 0
+		self.need_expand = False
 
 		self.incoming_reports = PriorityQueue()
 		self.draining_requests = deque()
@@ -44,11 +45,19 @@ class ProgressManager(object):
 		self.wait_thread.daemon = True
 		self.wait_thread.start()
 
+	def expand(self):
+		tuning_samples = self.threads * max(10, int(tuning_period * self.quota / self.quota_period))
+		self.recent_elapsed = deque(self.recent_elapsed, tuning_samples)
+		self.recent_headroom = deque(self.recent_headroom, tuning_samples)
+		self.recent_waits = deque(self.recent_waits, tuning_samples)
+
 	def register(self):
 		self.threads = self.threads + 1
+		self.need_expand = True
 
 	def unregister(self):
 		self.threads = self.threads - 1
+		self.need_expand = True
 	
 	def update_avg_headroom(self):
 		if not self.recent_headroom: result = self.quota
@@ -130,6 +139,9 @@ class ProgressManager(object):
 				self.incoming_reports.task_done()
 			except Empty:
 				self.drain_requests(time.time(), 0)
+			if self.need_expand:
+				self.need_expand = False
+				self.expand()
 
 	def drain_requests(self, now, requests_queued):
 		# clear any expired requests

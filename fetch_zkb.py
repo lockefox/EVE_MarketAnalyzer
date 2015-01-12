@@ -44,7 +44,7 @@ class Progress(object):
 			quota_period=zkb_quota_period,
 			tuning_period=zkb_tuning_period,
 			max_start_threads=4,
-			max_threads=10 ):
+			max_threads=20):
 		self.mode = mode
 		self.log_base = logfile
 		self.max_threads = 10
