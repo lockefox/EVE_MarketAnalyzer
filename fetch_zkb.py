@@ -104,7 +104,7 @@ class Progress(object):
 					opt = max(self.manager.optimal_threads, self.max_threads)
 					with self.state_lock:
 						needed = int(math.ceil(opt - 0.25) - len(self.running_queries))
-						needed = min(needed, len(self.outstanding_queries))
+						needed = int(math.ceil(min(needed, len(self.outstanding_queries)) / 2))
 					print "Need {0} new threads.".format(needed)
 					for _ in range(needed):
 						self.launch_thread()
