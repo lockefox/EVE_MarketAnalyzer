@@ -98,7 +98,8 @@ class Progress(object):
 			except Empty: pass
 			if time.time() - mark > self.manager.tuning_period:
 				mark = time.time()
-				if self.manager.avg_wait > 2:
+				expected_wait = self.manager.avg_elapsed - (self.manager.quota_period * len(self.running_queries) / self.manager.quota)
+				if 0 < self.manager.avg_wait > expected_wait:
 					needed = 0
 				else:
 					opt = max(self.manager.optimal_threads, self.max_threads)
