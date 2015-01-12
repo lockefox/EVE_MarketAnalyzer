@@ -199,14 +199,16 @@ class Progress(object):
 			return False
 			
 		self.mode = outstanding['mode']
-		self.outstanding_queries = deque(outstanding.get('outstanding_queries', []))
-		for i, q in enumerate(sorted(running['running_queries'])):
-			if i < max(max_threads, 1):
-				print "Launching recovery thread:", q
-				self.launch_thread(q)
-			else:
-				print "Queueing recovery thread:", q
-				self.outstanding_queries.append(q)
+		self.outstanding_queries = deque(sorted(outstanding.get('outstanding_queries', []), reverse=True))
+		running_queries = deque(sorted(running['running_queries']))
+		to_queue = len(running_queries) - min(len(running_queries), max_threads)
+		for _ in range(to_queue):
+			q = running_queries.pop()
+			print "Queueing recovery thread:", q
+			self.outstanding_queries.append(q)
+		for q in running_queries:
+			print "Launching recovery thread:", q
+			self.launch_thread(q)
 		return True
 		
 def connect_local_databases(*args):
