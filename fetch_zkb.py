@@ -130,7 +130,7 @@ class Progress(object):
 			with self.state_lock:
 				if query is None:
 					if (not self.outstanding_queries or 
-			 				1 < len(self.threads) > self.manager.optimal_threads + 1.25):
+			 				1 < len(self.running_queries) > self.manager.optimal_threads + 1.25):
 						if self.running_queries.has_key(me):
 							del self.running_queries[me]
 						flow_manager.progress.unregister()
