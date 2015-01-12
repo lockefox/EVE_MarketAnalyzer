@@ -98,14 +98,16 @@ class Progress(object):
 			except Empty: pass
 			if time.time() - mark > self.manager.tuning_period:
 				mark = time.time()
-				opt = self.manager.optimal_threads if self.manager.avg_wait < 0 else self.manager.threads
-				opt = min(opt, self.max_threads)
-				with self.state_lock:
-					needed = int(math.ceil(opt - 0.25) - len(self.running_queries))
-					needed = min(needed, len(self.outstanding_queries))
-				print "Need {0} new threads.".format(needed)
-				for _ in range(needed):
-					self.launch_thread()
+				if self.manager.avg_wait > 2:
+					needed = 0
+				else:
+					opt = max(self.manager.optimal_threads, self.max_threads)
+					with self.state_lock:
+						needed = int(math.ceil(opt - 0.25) - len(self.running_queries))
+						needed = min(needed, len(self.outstanding_queries))
+					print "Need {0} new threads.".format(needed)
+					for _ in range(needed):
+						self.launch_thread()
 
 	def launch_thread(self, query=None):
 		id = len(self.threads)
