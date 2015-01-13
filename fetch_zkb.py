@@ -81,16 +81,18 @@ class Progress(object):
 			self.launch_thread() # off we go!
 
 	def wait_until_finished(self):
+		iters = 0
 		while True:
 			done = []
 			for t in list(self.threads):
 				if t.is_alive(): t.join(1)
 				else: done.append(t)
+				iters = (iters + 1) % 30
 			if self.threads and len(done) == len(self.threads):
 				print "All %s outstanding threads finished." % len(done)
 				break
-			else: 
-				print "%s total threads, %s done threads", (len(done), len(self.threads))
+			elif iters == 0: 
+				print "%s total threads, %s done threads" % (len(done), len(self.threads))
 
 	def results_thread_routine(self):
 		data_conn, data_cur, sde_conn, sde_cur = connect_local_databases()
