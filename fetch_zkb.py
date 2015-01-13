@@ -51,7 +51,9 @@ class Progress(object):
 		self.manager = ProgressManager(quota, quota_period, tuning_period)
 		self.state_lock = threading.Lock()
 		self.outstanding_queries = deque()
+		self.outstanding_logfile = self.mode + ".outstanding." + self.log_base
 		self.running_queries = {}
+		self.running_logfile = self.mode + ".running." + self.log_base
 		self.failed_queries = deque()
 		self.results_to_write = Queue()
 		self.threads = []
@@ -81,11 +83,14 @@ class Progress(object):
 	def wait_until_finished(self):
 		while True:
 			done = []
-			for t in self.running_queries.keys():
+			for t in list(self.threads):
 				if t.is_alive(): t.join(1)
 				else: done.append(t)
 			if self.threads and len(done) == len(self.threads):
+				print "All %s outstanding threads finished." % len(done)
 				break
+			else: 
+				print "%s total threads, %s done threads", (len(done), len(self.threads))
 
 	def results_thread_routine(self):
 		data_conn, data_cur, sde_conn, sde_cur = connect_local_databases()
@@ -138,7 +143,7 @@ class Progress(object):
 						if self.running_queries.has_key(me):
 							del self.running_queries[me]
 						flow_manager.progress.unregister()
-						return
+						break
 					query = self.outstanding_queries.pop()
 			current_query = ZKBQuery(api_fetch_limit, query, flow_manager)
 			self.running_queries[me] = current_query
@@ -152,9 +157,9 @@ class Progress(object):
 			except Exception as e:
 				print "Thread %s caught exception on %s" % (me.name, current_query.get_query())
 				print e
-				self.failed_queries.appendleft( current_query.getQueryArgs() )
-				self.dump_all()
+				self.failed_queries.appendleft((current_query.getQueryArgs(), str(e)))
 			query = None
+		self.dump_all()
 
 	def dump_running(self):
 		with self.state_lock:
@@ -204,14 +209,16 @@ class Progress(object):
 		
 	def parse_crash_log(self, max_threads):
 		try:
-			with open("outstanding." + self.log_base, 'r') as log:
+			with open(self.outstanding_logfile, 'r') as log:
 				outstanding = json.load(log)
-			with open("running." + self.log_base, 'r') as log:
+			with open(self.running_logfile, 'r') as log:
 				running = json.load(log)
 		except Exception:
-			print 'Crash file not found.  Starting fresh'
+			print 'Crash file not found. Starting fresh'
 			return False
-			
+		if self.mode.upper() <> outstanding.mode.upper():
+			print 'Mode mismatch. Starting fresh.'
+			return False
 		self.mode = outstanding['mode']
 		self.outstanding_queries = deque(sorted(outstanding.get('outstanding_queries', []), reverse=True))
 		self.failed_queries = deque(sorted(outstanding.get('failed_queries', []), reverse=True))
@@ -451,7 +458,7 @@ def write_kills_to_SQL(zkb_return, db_cur, debug=False):
 
 def main():
 	_validate_connection()
-	progress = Progress(mode='group')
+	progress = Progress(mode='ship')
 	progress.wait_until_finished()
 
 if __name__ == "__main__":
