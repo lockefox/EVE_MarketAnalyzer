@@ -16,8 +16,8 @@ class ProgressManager(object):
 		self.quota = quota
 		self.quota_period = quota_period
 		self.tuning_period = tuning_period
-
-		self.avg_elapsed = self.quota_period / self.quota
+		self.optimal_elapsed = self.quota_period / self.quota
+		self.avg_elapsed = self.optimal_elapsed
 		self.avg_headroom = self.quota
 		self.avg_wait = 0.0
 		self.recent_elapsed = deque([], self.samples_per_thread)
@@ -47,13 +47,6 @@ class ProgressManager(object):
 	@property
 	def samples_per_thread(self):
 		return max(10, int(self.tuning_period * self.quota / self.quota_period))
-
-	def expand(self):
-		tuning_samples = self.threads * self.samples_per_thread
-		if tuning_samples == self.recent_elapsed.maxlen: return
-		self.recent_elapsed = deque(self.recent_elapsed, tuning_samples)
-		self.recent_headroom = deque(self.recent_headroom, tuning_samples)
-		self.recent_waits = deque(self.recent_waits, tuning_samples)
 
 	def register(self):
 		self.threads = self.threads + 1
@@ -91,18 +84,25 @@ class ProgressManager(object):
 		now = time.time()
 		next = now if not self.draining_requests else self.draining_requests[-1]
 		time_remaining = self.quota_period + next - now
-		return self.avg_elapsed * self.avg_headroom / time_remaining
+		res1 = self.avg_elapsed * self.avg_headroom / time_remaining
+		res2 = self.avg_elapsed / self.optimal_elapsed
+		f = time_remaining / self.quota_period
+		return f * res2 + (1 - f) * res1
 
-	def optimal_wait(self, now, headroom, elapsed, use_avg=True):
-		elapsed = self.avg_elapsed if use_avg else elapsed
+	def optimal_wait(self, now, headroom, elapsed):
 		time_remaining = self.draining_requests[-1] + self.quota_period - now
-		result = self.threads * time_remaining / headroom - elapsed
-		print "headroom: {0}; quota: {1}; time remaining: {2:.5}; elapsed: {3:.4} optimal wait: {4:.4}; avg wait: {5:.4}; threads: {6}; optimal threads: {7:.4}".format(
+		res1 = self.threads * time_remaining / headroom - elapsed
+		res2 = (self.threads * self.optimal_elapsed) - self.avg_elapsed
+		f = time_remaining / self.quota_period
+		result = f * res2 + (1 - f) * res1
+		print "headroom: {0}; quota: {1}; remaining: {2:.5}; elapsed: {3:.4}; opt wait, exact: {4:.4}, avg: {5:.4}, weighted: {6:.4}; avg wait: {7:.4}; threads: {8}; opt threads: {9:.4}".format(
 				headroom,
 				self.quota,
 				time_remaining,
 				elapsed,
-				result,
+				float(res1),
+				float(res2),
+				float(result),
 				self.avg_wait,
 				self.threads,
 				self.optimal_threads
@@ -143,9 +143,6 @@ class ProgressManager(object):
 				self.incoming_reports.task_done()
 			except Empty:
 				self.drain_requests(time.time(), 0)
-			if self.need_expand:
-				self.need_expand = False
-				self.expand()
 
 	def drain_requests(self, now, requests_queued):
 		# clear any expired requests
@@ -269,7 +266,7 @@ class FlowManager(object):
 
 	def server_error(self, resp):
 		assert(isinstance(resp, requests.Response))
-		tries, rest = self.urls.setdefault(resp.request.url, (0, 0.0))
+		tries, rest = self.urls.setdefault(resp.request.url, (0, 1.0))
 		self.urls[resp.request.url] = (tries + 1, rest)
 		if tries + 1 == self.max_tries or resp.status_code in (406, 409):
 			# 406 -- your query was bad and you should feel bad (no recovery possible)
@@ -283,6 +280,7 @@ class FlowManager(object):
 			# Internal server error -- probably not your fault.
 			# I mean -- 404 or 500 probably would be your fault but we checked your query
 			# before you issued it so we'll give you the benefit of the doubt.
+			print "Got %s, throttling %s" % (resp.status_code, rest + 2.0)
 			self.hard_throttle(resp.request.url, rest + 2.0)
 		else: 
 			# God only knows -- let's see if someone else can make sense of the problem

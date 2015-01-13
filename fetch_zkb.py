@@ -43,8 +43,8 @@ class Progress(object):
 			quota=zkb_scrape_limit,
 			quota_period=zkb_quota_period,
 			tuning_period=zkb_tuning_period,
-			max_start_threads=4,
-			max_threads=20):
+			max_start_threads=15,
+			max_threads=30):
 		self.mode = mode
 		self.log_base = logfile
 		self.max_threads = max_threads
@@ -52,6 +52,7 @@ class Progress(object):
 		self.state_lock = threading.Lock()
 		self.outstanding_queries = deque()
 		self.running_queries = {}
+		self.failed_queries = deque()
 		self.results_to_write = Queue()
 		self.threads = []
 
@@ -91,12 +92,14 @@ class Progress(object):
 		mark = time.time()
 		while True:
 			try:
-				result = self.results_to_write.get(self.manager.avg_elapsed)
+				print "Waiting for result."
+				result = self.results_to_write.get(self.manager.optimal_elapsed)
 				write_kills_to_SQL(result, data_cur)
 				# print "Skipping SQL write: {0} records".format(len(result))
 				self.results_to_write.task_done()
 			except Empty: pass
 			if time.time() - mark > self.manager.tuning_period:
+				print "Tuning threads."
 				mark = time.time()
 				with self.state_lock:
 					running = len(self.running_queries)
@@ -107,30 +110,29 @@ class Progress(object):
 				else:
 					opt = self.manager.optimal_threads
 					needed = int(math.ceil(opt - 0.25) - running)
-					needed = int(math.ceil(min(needed, outstanding) / 2))
+					needed = min(needed, outstanding)
 				print "Need {0} new threads.".format(needed)
 				for _ in range(needed):
 					self.launch_thread()
 
 	def launch_thread(self, query=None):
-		with self.state_lock:
-			id = len(self.threads)
-			running = len(self.running_queries)
-			t = threading.Thread(
-				target=self.query_thread_routine,
-				kwargs={'query': query},
-				name="Query thread #{0} ({1} running)".format(id, running)
-			)
-			t.daemon = True
-			self.threads.append(t)
+		id = len(self.threads)
+		running = len(self.running_queries)
+		t = threading.Thread(
+			target=self.query_thread_routine,
+			kwargs={'query': query},
+			name="Query thread #{0} ({1} running)".format(id, running)
+		)
+		t.daemon = True
+		self.threads.append(t)
 		t.start()
 
 	def query_thread_routine(self, query=None):
 		flow_manager = FlowManager(progress_obj=self.manager)
 		me = threading.current_thread()
 		while True:
-			with self.state_lock:
-				if query is None:
+			if query is None:
+				with self.state_lock:
 					if (not self.outstanding_queries or 
 			 				1 < len(self.running_queries) > self.manager.optimal_threads + 1.25):
 						if self.running_queries.has_key(me):
@@ -138,12 +140,20 @@ class Progress(object):
 						flow_manager.progress.unregister()
 						return
 					query = self.outstanding_queries.pop()
-				current_query = ZKBQuery(api_fetch_limit, query, flow_manager)
-				self.running_queries[me] = current_query
+			current_query = ZKBQuery(api_fetch_limit, query, flow_manager)
+			self.running_queries[me] = current_query
 			self.dump_all()
-			for result in current_query:
-				self.results_to_write.put(result)
-				self.dump_running()
+			print "%s fetching results." % me.name
+			try:
+				for result in current_query:
+					print "%s fetched result." % me.name
+					self.results_to_write.put(result)
+					self.dump_running()
+			except Exception as e:
+				print "Thread %s caught exception on %s" % (me.name, current_query.get_query())
+				print e
+				self.failed_queries.appendleft( current_query.getQueryArgs() )
+				self.dump_all()
 			query = None
 
 	def dump_running(self):
@@ -154,17 +164,19 @@ class Progress(object):
 					for q in self.running_queries.values()
 			]
 			running['logfile'] = "running." + self.log_base
-			with open(running['logfile'], 'w') as log:
-				json.dump(
-					obj=running,
-					fp=log,
-					indent=3,
-					separators=(',',': ')
-				)
+
+		with open(running['logfile'], 'w') as log:
+			json.dump(
+				obj=running,
+				fp=log,
+				indent=3,
+				separators=(',',': ')
+			)
 
 	def build_dump_objects(self):
 		outstanding = {}
 		outstanding['outstanding_queries'] = list(self.outstanding_queries)
+		outstanding['failed_queries'] = list(self.failed_queries)
 		outstanding['mode'] = self.mode
 		outstanding['logfile'] = "outstanding." + self.log_base
 
@@ -173,20 +185,22 @@ class Progress(object):
 			q.getQueryArgs() 
 				for q in self.running_queries.values()
 		]
+		
 		running['logfile'] = "running." + self.log_base
 		return outstanding, running
 		
 	def dump_all(self):
 		with self.state_lock:
-			for o in self.build_dump_objects():
-				with open(o['logfile'], 'w') as log:
-					json.dump(
-						obj=o,
-						fp=log, 
-						sort_keys=True,
-						indent=3,
-						separators=(',',': ')
-					)
+			os = self.build_dump_objects()
+		for o in os:
+			with open(o['logfile'], 'w') as log:
+				json.dump(
+					obj=o,
+					fp=log, 
+					sort_keys=True,
+					indent=3,
+					separators=(',',': ')
+				)
 		
 	def parse_crash_log(self, max_threads):
 		try:
@@ -200,6 +214,7 @@ class Progress(object):
 			
 		self.mode = outstanding['mode']
 		self.outstanding_queries = deque(sorted(outstanding.get('outstanding_queries', []), reverse=True))
+		self.failed_queries = deque(sorted(outstanding.get('failed_queries', []), reverse=True))
 		running_queries = deque(sorted(running['running_queries']))
 		to_queue = len(running_queries) - min(len(running_queries), max_threads)
 		for _ in range(to_queue):
@@ -436,7 +451,7 @@ def write_kills_to_SQL(zkb_return, db_cur, debug=False):
 
 def main():
 	_validate_connection()
-	progress = Progress(mode='ship')
+	progress = Progress(mode='group')
 	progress.wait_until_finished()
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ zkb_tuning_period = int(conf.get("ZKB", "zkb_tuning_period"))
 subquery_limit = int(conf.get("ZKB","subquery_limit"))
 retry_limit = int(conf.get("ZKB","retry_limit"))
 default_sleep = int(conf.get("ZKB","default_sleep"))
-User_Agent = conf.get("GLOBALS","user_agent")
+User_Agent = "Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36" # conf.get("GLOBALS","user_agent")
 logfile = conf.get("ZKB","logfile")
 result_dumpfile = conf.get("ZKB","result_dumpfile")
 
