@@ -1,5 +1,5 @@
 from __future__ import division
-import sys, time, json, _strptime, math
+import sys, time, json, _strptime, math, os
 from os import path, environ
 import ConfigParser
 import pypyodbc
@@ -219,18 +219,35 @@ class Progress(object):
 		if self.mode.upper() <> outstanding.mode.upper():
 			print 'Mode mismatch. Starting fresh.'
 			return False
+
+		def backup_file(logfile):
+			i = 0
+			while path.exists(logfile + '.' + str(i)):
+				i = i + 1
+			os.rename(logfile, logfile + '.' + str(i))
+
+		backup_file(self.outstanding_logfile)
+		backup_file(self.running_logfile)
+
 		self.mode = outstanding['mode']
 		self.outstanding_queries = deque(sorted(outstanding.get('outstanding_queries', []), reverse=True))
 		self.failed_queries = deque(sorted(outstanding.get('failed_queries', []), reverse=True))
 		running_queries = deque(sorted(running['running_queries']))
-		to_queue = len(running_queries) - min(len(running_queries), max_threads)
-		for _ in range(to_queue):
-			q = running_queries.pop()
-			print "Queueing recovery thread:", q
-			self.outstanding_queries.append(q)
-		for q in running_queries:
-			print "Launching recovery thread:", q
-			self.launch_thread(q)
+		if not running_queries and not self.outstanding_queries:
+			print "Recovery files existed but no queries were available for recovery."
+			return False
+		elif not running_queries:
+			print "Recovery files existed but there were no running queries. Launching from queue."
+			self.launch_thread()
+		else:
+			to_queue = len(running_queries) - min(len(running_queries), max_threads)		
+			for _ in range(to_queue):
+				q = running_queries.pop()
+				print "Queueing recovery thread:", q
+				self.outstanding_queries.append(q)
+			for q in running_queries:
+				print "Launching recovery thread:", q
+				self.launch_thread(q)
 		return True
 		
 def connect_local_databases(*args):
