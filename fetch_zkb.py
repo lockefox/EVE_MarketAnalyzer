@@ -147,10 +147,8 @@ class Progress(object):
 			current_query = ZKBQuery(api_fetch_limit, query, flow_manager)
 			self.running_queries[me] = current_query
 			self.dump_all()
-			print "%s fetching results." % me.name
 			try:
 				for result in current_query:
-					print "%s fetched result." % me.name
 					self.results_to_write.put(result)
 					self.dump_running()
 			except Exception as e:
@@ -215,7 +213,7 @@ class Progress(object):
 		except Exception:
 			print 'Crash file not found. Starting fresh'
 			return False
-		if self.mode.upper() <> outstanding.mode.upper():
+		if self.mode.upper() <> outstanding['mode'].upper():
 			print 'Mode mismatch. Starting fresh.'
 			return False
 
