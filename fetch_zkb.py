@@ -69,13 +69,12 @@ class Progress(object):
 			# for testing purposes
 			qb = ZKBQueryBuilder()
 			for g in get_crawl_list(self.mode):
-				print "Adding %s type %d" % (self.mode, g)
 				qb.reset()
 				if self.mode.upper() == "GROUP": qb.group(g)
 				else: qb.ship(g)
 
 				qb.api_only()
-				print qb.get_query()
+				print "Queuing startup thread: %s" % qb.get_query()
 				self.outstanding_queries.appendleft(qb.getQueryArgs())
 
 			self.launch_thread() # off we go!
@@ -99,14 +98,12 @@ class Progress(object):
 		mark = time.time()
 		while True:
 			try:
-				print "Waiting for result."
 				result = self.results_to_write.get(self.manager.optimal_elapsed)
 				write_kills_to_SQL(result, data_cur)
 				# print "Skipping SQL write: {0} records".format(len(result))
 				self.results_to_write.task_done()
 			except Empty: pass
 			if time.time() - mark > self.manager.tuning_period:
-				print "Tuning threads."
 				mark = time.time()
 				with self.state_lock:
 					running = len(self.running_queries)
@@ -170,7 +167,7 @@ class Progress(object):
 				q.getQueryArgs() 
 					for q in self.running_queries.values()
 			]
-			running['logfile'] = "running." + self.log_base
+			running['logfile'] = self.running_logfile
 
 		with open(running['logfile'], 'w') as log:
 			json.dump(
@@ -185,7 +182,7 @@ class Progress(object):
 		outstanding['outstanding_queries'] = list(self.outstanding_queries)
 		outstanding['failed_queries'] = list(self.failed_queries)
 		outstanding['mode'] = self.mode
-		outstanding['logfile'] = "outstanding." + self.log_base
+		outstanding['logfile'] = self.outstanding_logfile
 
 		running = {}
 		running['running_queries'] = [
@@ -193,7 +190,7 @@ class Progress(object):
 				for q in self.running_queries.values()
 		]
 		
-		running['logfile'] = "running." + self.log_base
+		running['logfile'] = self.running_logfile
 		return outstanding, running
 		
 	def dump_all(self):
