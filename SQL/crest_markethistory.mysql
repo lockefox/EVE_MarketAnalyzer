@@ -12,4 +12,4 @@ CREATE TABLE `crest_markethistory` (
 ENGINE=InnoDB DEFAULT CHARSET=latin1;
 CREATE INDEX price_dates ON crest_markethistory(price_date);
 CREATE INDEX itemids	 ON crest_markethistory(itemid);
-CREATE INDEX regionids	 ON crest_markethistory(regionid)
+CREATE INDEX regionids	 ON crest_markethistory(regionid);
