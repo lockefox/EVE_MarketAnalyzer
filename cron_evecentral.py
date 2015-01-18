@@ -2,7 +2,7 @@ import sys, gzip, StringIO, sys, math, os, getopt, time, json, socket
 from os import path, environ
 import urllib2
 import urllib
-import mySQLdb
+import MySQLdb 
 #ODBC connector not supported on pi/ARM platform
 from datetime import datetime, timedelta
 import threading
@@ -41,21 +41,24 @@ def query_locationType(locationID):
 
 def fetch_typeIDs():
 	global itemlist
-	sde_con = mysqldb.connect(
+	sde_con = MySQLdb.connect(
 		host   = db_host,
 		user   = db_user,
 		passwd = db_pw,
 		port   = db_port,
 		db     = sde_schema)
 	sde_cur = sde_con.cursor()
-	
+
 	query_filename = conf.get('CRON','evecentral_query')
-	item_query = open(path.relpath('sql/%s.mysql' % query_filename)).read()
-	
+	item_query = open(path.relpath('SQL/%s.mysql' % query_filename)).read()
+	print item_query
 	sde_cur.execute(item_query)
-	raw_values = sde_cur.fetchall
+	raw_values = sde_cur.fetchall()
 	
-	return raw_values
+	return_list = []
+	for row in raw_values:
+		return_list.append(row[0])
+	return return_list
 	
 def writelog(locationID, message):
 	None
@@ -70,22 +73,22 @@ def _initSQL(table_name):
 		port   = db_port,
 		db     = db_schema)
 	db_cur = db_con.cursor()
-	db_cur.execute('''SHOW TABLES LIKE \'%s\'''' % snapshot_table)
+	db_cur.execute('''SHOW TABLES LIKE \'%s\'''' % table_name)
 	db_exists = len(db_cur.fetchall())
 	if db_exists:
-		print '%s.%s:\tGOOD' % (db_schema,name)
+		print '%s.%s:\tGOOD' % (db_schema,table_name)
 	else:	#TODO: add override command to avoid 'drop table' command 
-		table_init = open(path.relpath('sql/%s.mysql' % snapshot_table) ).read()
+		table_init = open(path.relpath('SQL/%s.mysql' % table_name) ).read()
 		table_init_commands = table_init.split(';')
 		try:
 			for command in table_init_commands:
 				db_cur.execute(command)
 				db_con.commit()
 		except Exception as e:
-			print '%s.%s:\tERROR' % (db_schema,name)
+			print '%s.%s:\tERROR' % (db_schema,table_name)
 			print e[1]
 			sys.exit(2)
-		print '%s.%s:\tCREATED' % (db_schema,name)
+		print '%s.%s:\tCREATED' % (db_schema,table_name)
 
 def fetch_data(itemlist,locationID,debug=False):
 	fetch_scope = query_locationType(locationID)
@@ -164,7 +167,7 @@ def fetch_data(itemlist,locationID,debug=False):
 	
 	return return_result
 def main():
-	_initSQL()
+	_initSQL(snapshot_table)
 	
 	item_list = fetch_typeIDs()
 	print item_list
