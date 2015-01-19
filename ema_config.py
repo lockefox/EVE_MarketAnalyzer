@@ -18,7 +18,8 @@ sleep_timer = int(conf.get('GLOBALS','default_sleep'))
 crash_filename_base = conf.get('CREST','progress_file_base')
 tick_delay = timedelta(seconds=10)
 tick_delay_dbg = timedelta(seconds=5)
-
+default_timeout = int(conf.get('GLOBALS','default_timeout'))
+default_readtimeout = int(conf.get('GLOBALS','default_readtimeout'))
 ####DB STUFF####
 db_host   = conf.get('GLOBALS','db_host')
 db_user   = conf.get('GLOBALS','db_user')

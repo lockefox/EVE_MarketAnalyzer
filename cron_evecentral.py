@@ -113,12 +113,31 @@ def fetch_data(itemlist,locationID,debug=False):
 		'typeid'          : itemid_str
 		}
 	for tries in range (0,retry_limit):
-		request = requests.post(fetch_url, data=POST_values)
+		time.sleep(sleep_timer*tries)
+		try:
+			request = requests.post(fetch_url, 
+				data=POST_values,
+				timeout=(default_timeout,default_readtimeout))
+			request.json()
+		except requests.exceptions.ConnectionError as e:
+			print 'connectionError %s' % e
+			continue
+		except requests.exceptions.ConnectTimeout as e:	
+			print 'connectionTimeout %s' % e
+			continue
+		except requests.exceptions.ReadTimeout as e:	
+			print 'readTimeout %s' % e
+			continue
+		except ValueError:
+			print 'response not JSON'
+			sys.exit()
 		if request.status_code == requests.codes.ok:
 			break
 		else:
 			print request.status_code
-	
+			continue
+	else:
+		print 'going down in flames'
 	return request.json()
 		
 def writeSQL(JSON_obj,locationID):
