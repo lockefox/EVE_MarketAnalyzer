@@ -1,6 +1,8 @@
 import sys, gzip, StringIO, sys, math, os, getopt, time, json, socket
 from os import path, environ
 import urllib2
+import httplib
+import requests
 import urllib
 import MySQLdb 
 #ODBC connector not supported on pi/ARM platform
@@ -99,87 +101,26 @@ def _initSQL(table_name):
 		tmp_headers.append(row[0])
 		
 	table_header = ','.join(tmp_headers)
-	
+
 def fetch_data(itemlist,locationID,debug=False):
+	fetch_url = "%s%s" % (evecentral_url,fetch_type) 
 	fetch_scope = query_locationType(locationID)
 	itemid_str = ','.join(map(str,itemlist))
-	
-	fetch_url = "%s%s" % (evecentral_url,fetch_type) 
-	real_query = '%s?%s=%s&typeid=%s' % (fetch_url,fetch_scope,locationID,itemid_str)
-	#if debug: thread_print( real_query )
-
-	request = urllib2.Request(fetch_url)
-	request.add_header('Accept-Encoding','gzip')
-	request.add_header('User-Agent',user_agent)
-	request.add_header(fetch_scope,locationID)
-	request.add_header('typeid',itemid_str)
-	
-	#POST_values = {
-	#	'accept-encoding' : 'gzip',
-	#	fetch_scope       : locationID,
-	#	'user-agent'      : user_agent,
-	#	'typeid'          : itemid_str
-	#	}
-	#
-	#payload = urllib.urlencode(POST_values)
-	#request = urllib2.Request(fetch_url,payload)
-	
-	headers = {}
-	fatal_error = True
+	POST_values = {
+		'accept-encoding' : 'gzip',
+		fetch_scope       : locationID,
+		'user-agent'      : user_agent,
+		'typeid'          : itemid_str
+		}
 	for tries in range (0,retry_limit):
-		time.sleep(sleep_timer*tries)
-		try:
-			opener = urllib2.build_opener()
-			raw_response = opener.open(request)
-			headers = raw_response.headers
-			response = raw_response.read()
-		except urllib2.HTTPError as e:
-			if e.code == 503: 
-				time.sleep(random.random()/8.0)
-			else:
-				print 'HTTPError:%s %s' % (e,real_query) 
-			fatal_error = False
-			continue
-		except urllib2.URLError as e:
-			print 'URLError:%s %s' % (e,real_query) 
-			fatal_error = True
-			continue
-		except httplib.HTTPException as e:
-			print 'HTTPException:%s %s' % (e, real_query) 
-			fatal_error = True
-			continue
-		except socket.error as e:
-			print 'Socket Error:%s %s' % (e,real_query) 
-			fatal_error = True
-			continue
-		
-		do_gzip = headers.get('Content-Encoding','') == 'gzip'
-				
-		if do_gzip:
-			try:
-				buf = StringIO.StringIO(response)
-				zipper = gzip.GzipFile(fileobj=buf)
-				return_result = json.load(zipper)
-			except ValueError as e:
-				print "Empty response: Retry %s" % real_query 
-				fatal_error = True
-				continue
-			except IOError as e:
-				print "gzip unreadable: Retry %s" % real_query 
-				fatal_error = True
-				continue
-			else:
-				break
-		else:
-			return_result = json.loads(response)
+		request = requests.post(fetch_url, data=POST_values)
+		if request.status_code == requests.codes.ok:
 			break
-	else:
-		print headers 
-		if fatal_error: sys.exit(2)
-		return {'items':[]}
+		else:
+			print request.status_code
 	
-	return return_result
-	
+	return request.json()
+		
 def writeSQL(JSON_obj,locationID):
 	insert_statement = '''INSERT INTO %s (%s) VALUES''' % (snapshot_table, table_header)
 	
@@ -198,7 +139,7 @@ def writeSQL(JSON_obj,locationID):
 			else:
 				best_price = price_obj['max']
 			
-			insert_line = '''('%s','%s',%s,%s,'%s',%s,%s,%s,%s,%s)''' % (/
+			insert_line = '''('%s','%s',%s,%s,'%s',%s,%s,%s,%s,%s)''' % (\
 				commit_date,\
 				commit_time,\
 				price_obj['forQuery']['types'][0],\
