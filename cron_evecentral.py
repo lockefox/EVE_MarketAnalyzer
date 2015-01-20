@@ -25,6 +25,7 @@ table_header = ''	#will be an issue if _initSQL is called multiple times
 start_datetime = datetime.utcnow()
 commit_date = start_datetime.strftime('%Y-%m-%d')
 commit_time = start_datetime.strftime('%H:%M:%S')
+default_locationid = int(conf.get('CRON','evecentral_defaultlocationid'))
 
 def thread_print(msg):
 	sys.stdout.write("%s\n" % msg)
@@ -189,11 +190,27 @@ def writeSQL(JSON_obj,locationID, debug=False):
 	db_con.commit()
 	
 def main():
+	locationID = default_locationid
+	optimize_table = False
+	try:
+		opts, args = getopt.getopt(sys.argv[1:],'h:l', ['locationid=','optimize_table'])
+	except getopt.GetoptError as e:
+		print str(e)
+		print 'unsupported argument'
+		sys.exit()
+	for opt, arg in opts:
+		if opt == '--locationid':
+			locationID = arg
+		elif opt == '--optimize_table':
+			optimize_table = True
+		else:
+			assert False
+
 	_initSQL(snapshot_table)
 	
 	item_list = fetch_typeIDs()
 	
-	locationID = 30000142
+	
 	request_limit = int(conf.get('CRON','evecentral_typelimit'))
 	sub_list = []
 	for itemid in item_list:
