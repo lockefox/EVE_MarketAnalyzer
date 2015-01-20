@@ -130,7 +130,7 @@ def fetch_data(itemlist,locationID,debug=False):
 			continue
 		except ValueError:
 			print 'response not JSON'
-			sys.exit()
+			raise
 		if request.status_code == requests.codes.ok:
 			break
 		else:
@@ -140,9 +140,9 @@ def fetch_data(itemlist,locationID,debug=False):
 		print 'going down in flames'
 	return request.json()
 		
-def writeSQL(JSON_obj,locationID):
-	insert_statement = '''INSERT INTO %s (%s) VALUES''' % (snapshot_table, table_header)
-	
+def writeSQL(JSON_obj,locationID, debug=False):
+	insert_statement = '''INSERT IGNORE INTO %s (%s) VALUES''' % (snapshot_table, table_header)
+		##INSERT IGNORE generates warnings for collisions, not errors
 	for item_info in JSON_obj:
 		for price_key,price_obj in item_info.iteritems():
 			buy_or_sell = 0
@@ -158,7 +158,7 @@ def writeSQL(JSON_obj,locationID):
 			else:
 				best_price = price_obj['max']
 			
-			insert_line = '''('%s','%s',%s,%s,'%s',%s,%s,%s,%s,%s)''' % (\
+			insert_line = '''('%s','%s',%s,%s,'%s',%s,%s,%s,%s,%s),''' % (\
 				commit_date,\
 				commit_time,\
 				price_obj['forQuery']['types'][0],\
@@ -167,7 +167,11 @@ def writeSQL(JSON_obj,locationID):
 				best_price,\
 				price_obj['avg'],\
 				price_obj['volume'])
-				
+			insert_statement = '%s%s' % (insert_statement, insert_line)
+	insert_statement = inser_statement[:-1] #strip trailing ','
+	if debug: print insert_statement
+	db_cur.execute(insert_statement).commit()
+	
 def main():
 	_initSQL(snapshot_table)
 	
