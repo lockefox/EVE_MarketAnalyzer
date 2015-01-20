@@ -30,20 +30,32 @@ def thread_print(msg):
 	sys.stdout.write("%s\n" % msg)
 	sys.stdout.flush()
 	
-def query_locationType(locationID):
+def query_locationType(locationID,switch=False):
 	#Returns supported query modifier.  Else blank to avoid bad calls
 	digit = str(locationID)[:1]
 	int_digit = int(digit)
 	if int_digit == 1:
-		return 'regionlimit'
+		if switch:
+			return 'regionid'
+		else:
+			return 'regionlimit'
 	#elif  int_digit == 2:
 	#	None #constellation not supported
 	elif int_digit == 3:
-		return 'usesystem'
+		if switch:
+			return 'solarsystemid'
+		else:
+			return 'usesystem'
 	elif int_digit == 6:
-		return 'usestation'
+		if switch:
+			return 'stationid'
+		else:
+			return 'usestation'
 	else:
-		return ''	#exception would be better
+		if switch:
+			return 'global'
+		else:
+			return ''	#exception would be better
 
 def fetch_typeIDs():
 	global itemlist
@@ -106,6 +118,8 @@ def fetch_data(itemlist,locationID,debug=False):
 	fetch_url = "%s%s" % (evecentral_url,fetch_type) 
 	fetch_scope = query_locationType(locationID)
 	itemid_str = ','.join(map(str,itemlist))
+	if debug: print len(itemlist)
+	if debug: print itemid_str
 	POST_values = {
 		'accept-encoding' : 'gzip',
 		fetch_scope       : locationID,
@@ -158,19 +172,21 @@ def writeSQL(JSON_obj,locationID, debug=False):
 			else:
 				best_price = price_obj['max']
 			
-			insert_line = '''('%s','%s',%s,%s,'%s',%s,%s,%s,%s,%s),''' % (\
+			insert_line = '''('%s','%s',%s,%s,'%s',%s,%s,%s,%s),''' % (\
 				commit_date,\
 				commit_time,\
 				price_obj['forQuery']['types'][0],\
 				locationID,\
-				query_locationType(locationID),\
+				query_locationType(locationID,True),\
+				buy_or_sell,\
 				best_price,\
 				price_obj['avg'],\
 				price_obj['volume'])
 			insert_statement = '%s%s' % (insert_statement, insert_line)
-	insert_statement = inser_statement[:-1] #strip trailing ','
+	insert_statement = insert_statement[:-1] #strip trailing ','
 	if debug: print insert_statement
-	db_cur.execute(insert_statement).commit()
+	db_cur.execute(insert_statement)
+	db_con.commit()
 	
 def main():
 	_initSQL(snapshot_table)
@@ -184,13 +200,12 @@ def main():
 		sub_list.append(itemid)
 		if len(sub_list) >= request_limit:
 			return_JSON = fetch_data(sub_list,locationID)
-			print return_JSON
-			sys.exit()
+			
 			writeSQL(return_JSON,locationID)
 			sub_list = []
 	if len(sub_list) > 0:
-		return_JSON = fetch_data(item_list,systemID)
-		writeSQL(return_JSON)
+		return_JSON = fetch_data(sub_list,locationID)
+		writeSQL(return_JSON,locationID)
 			
 	
 if __name__ == "__main__":
