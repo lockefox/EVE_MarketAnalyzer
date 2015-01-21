@@ -1,14 +1,16 @@
 import ConfigParser
 import pypyodbc
 import sys
-from os import environ, path
+from os import environ, path, getcwd
 from datetime import timedelta
 
-import itertools
-flatten = itertools.chain.from_iterable
+localpath = path.dirname(path.realpath(__file__))
+DEV_localpath = path.join(localpath,'init.ini')
+ALT_localpath = path.join(localpath,'init_local.ini')
 
 conf = ConfigParser.ConfigParser()
-conf.read([path.relpath('init.ini'),path.relpath('init_local.ini')])
+conf.read([DEV_localpath,ALT_localpath])
+
 ####GLOBALS####
 crest_path = conf.get('CREST','default_path')
 crest_test_path = conf.get('CREST','test_path')

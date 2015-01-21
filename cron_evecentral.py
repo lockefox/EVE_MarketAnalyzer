@@ -69,7 +69,8 @@ def fetch_typeIDs():
 	sde_cur = sde_con.cursor()
 
 	query_filename = conf.get('CRON','evecentral_query')
-	item_query = open(path.relpath('SQL/%s.mysql' % query_filename)).read()
+	query_filename = '%s/SQL/%s.mysql' % (localpath,query_filename)
+	item_query = open(query_filename).read()
 	sde_cur.execute(item_query)
 	raw_values = sde_cur.fetchall()
 	
