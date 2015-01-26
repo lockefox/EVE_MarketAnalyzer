@@ -121,7 +121,8 @@ region_list = {
 	'10000066':'Perrigen Falls',
 	'10000067':'Genesis',
 	'10000068':'Verge Vendor',
-	'10000069':'Black Rise'
+	'10000069':'Black Rise',
+	'11000031':'Thera'
 	}
 
 trunc_region_list = {

@@ -1,9 +1,9 @@
 {
     "plot_defaults": {
-        "width": 1000,
-        "height": 600,
+        "width": 1600,
+        "height": 900,
         "format": "png",
-        "db_schema": "oceanus-1.0-105658",
+        "db_schema": "proteus-1.0-109795",
         "db_host": "127.0.0.1",
         "db_user": "root",
         "db_pw": "bar",
