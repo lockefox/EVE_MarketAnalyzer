@@ -12,7 +12,7 @@ conf.read(['init.ini','init_local.ini'])
 ####GLOBALS####
 crest_path = conf.get('CREST','default_path')
 crest_test_path = conf.get('CREST','test_path')
-user_agent = "Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36" # conf.get('GLOBALS','user_agent')
+user_agent = conf.get('GLOBALS','user_agent')
 retry_limit = int(conf.get('GLOBALS','default_retries'))
 sleep_timer = int(conf.get('GLOBALS','default_sleep'))
 crash_filename_base = conf.get('CREST','progress_file_base')
