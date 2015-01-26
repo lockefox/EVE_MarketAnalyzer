@@ -1,14 +1,18 @@
 import ConfigParser
 import pypyodbc
 import sys
-from os import environ
+from os import environ, path, getcwd
 from datetime import timedelta
-
 import itertools
 flatten = itertools.chain.from_iterable
 
+localpath = path.dirname(path.realpath(__file__))
+DEV_localpath = path.join(localpath,'init.ini')
+ALT_localpath = path.join(localpath,'init_local.ini')
+
 conf = ConfigParser.ConfigParser()
-conf.read(['init.ini','init_local.ini'])
+conf.read([DEV_localpath,ALT_localpath])
+
 ####GLOBALS####
 crest_path = conf.get('CREST','default_path')
 crest_test_path = conf.get('CREST','test_path')
@@ -18,7 +22,8 @@ sleep_timer = int(conf.get('GLOBALS','default_sleep'))
 crash_filename_base = conf.get('CREST','progress_file_base')
 tick_delay = timedelta(seconds=10)
 tick_delay_dbg = timedelta(seconds=5)
-
+default_timeout = int(conf.get('GLOBALS','default_timeout'))
+default_readtimeout = int(conf.get('GLOBALS','default_readtimeout'))
 ####DB STUFF####
 db_host   = conf.get('GLOBALS','db_host')
 db_user   = conf.get('GLOBALS','db_user')
@@ -116,7 +121,8 @@ region_list = {
 	'10000066':'Perrigen Falls',
 	'10000067':'Genesis',
 	'10000068':'Verge Vendor',
-	'10000069':'Black Rise'
+	'10000069':'Black Rise',
+	'11000031':'Thera'
 	}
 
 trunc_region_list = {
@@ -125,7 +131,7 @@ trunc_region_list = {
 	'10000030':'Heimatar',
 	'10000032':'Sinq Laison',
 	'10000042':'Metropolis',
-	'11000031':'G-R00031'
+	'11000031':'Thera'
 	}
 
 region_name_maxlen = max( len( r ) for r in region_list.values() ) + 1

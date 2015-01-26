@@ -318,6 +318,10 @@ def fetch_and_plot(data_struct, which_flags, TA_args = "", region=10000002):
 				n <- nrow(market.sqldata)
 				market.data <- data.table(market.sqldata[1:n-1,])
 				market.data$Open <- market.sqldata$Close[-1]
+				low_flag  = quantile(market.data$Low,.25)/5
+				high_flag = quantile(market.data$High,.75)*5
+				market.data$Low[market.data$Low<=low_flag] <-min(market.data$Open,market.data$Close)
+				market.data$High[market.data$High>=high_flag] <-max(market.data$Open,market.data$Close)				
 				market.data.ts <- xts(market.data[,-1,with=F], order.by=market.data[,Date], period=7)
 				{img_type}('{img_path}',width = {img_X}, height = {img_Y})
 				chartSeries(market.data.ts,
@@ -386,12 +390,12 @@ def main(region):
 		)
 	V.convert = convert
 	
-	#print 'Plotting Forced Group'
-	#R_config_file = open(conf.get('STATS','R_config_file'),'r')
-	#R_todo = json.load(R_config_file)
-	#fetch_and_plot(R_todo['forced_plots'], 'forced', ";addRSI();addLines(h=30, on=4);addLines(h=70, on=4)",region=region)
-	#robjects.r("close(emd)")
-	#sys.exit(0)
+	print 'Plotting Forced Group'
+	R_config_file = open(conf.get('STATS','R_config_file'),'r')
+	R_todo = json.load(R_config_file)
+	fetch_and_plot(R_todo['forced_plots'], 'forced', ";addRSI();addLines(h=30, on=4);addLines(h=70, on=4)",region=region)
+	robjects.r("close(emd)")
+	sys.exit(0)
 	
 	market_data_groups = fetch_market_data(region=region)
 	V.market_data_groups = market_data_groups
