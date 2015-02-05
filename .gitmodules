@@ -1,0 +1,3 @@
+[submodule "eveapi"]
+	path = eveapi
+	url = https://github.com/ntt/eveapi.git
