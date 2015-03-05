@@ -1,0 +1,140 @@
+{
+	"keys": [
+		"release_date",
+		"sde_version",
+		"crius_industry",
+		"shortJump",
+		"thera",
+		"newSov"		
+	],	
+	"patches": {
+		"Tiamat": {
+			"release_date":"2015-02-17",
+			"sde_version":"tiamat-1.0-110751",
+			"crius_industry":1,
+			"shortJump":1,
+			"thera":1,
+			"newSov":0
+		},
+		"Proteus": {
+			"release_date":"2015-01-13",
+			"sde_version":"proteus-1.0-109795",
+			"crius_industry":1,
+			"shortJump":1,
+			"thera":1,
+			"newSov":0
+		},
+		"Rhea": {
+			"release_date":"2014-12-09",
+			"sde_version":"rhea-1.0-109013",
+			"crius_industry":1,
+			"shortJump":1,
+			"thera":1,
+			"newSov":0
+		},
+		"Phoebe": {
+			"release_date":"2014-11-04",
+			"sde_version":"phoebe-1.0-107269",
+			"crius_industry":1,
+			"shortJump":1,
+			"thera":0,
+			"newSov":0
+		},
+		"Oceanus": {
+			"release_date":"2014-09-30",
+			"sde_version":"oceanus-1.0-105658",
+			"crius_industry":1,
+			"shortJump":0,
+			"thera":0,
+			"newSov":0
+		},
+		"Hyperion": {
+			"release_date":"2014-08-26",
+			"sde_version":"hyperion-1.0-101505",
+			"crius_industry":1,
+			"shortJump":0,
+			"thera":0,
+			"newSov":0
+		},
+		"Crius": {
+			"release_date":"2014-07-22",
+			"sde_version":"crius-1.0-100038",
+			"crius_industry":1,
+			"shortJump":0,
+			"thera":0,
+			"newSov":0
+		},
+		"Kronos": {
+			"release_date":"2014-06-03",
+			"sde_version":"kronos-1.0-98534",
+			"crius_industry":0,
+			"shortJump":0,
+			"thera":0,
+			"newSov":0
+		},
+		"Rubicon4": {
+			"release_date":"2014-05-28",
+			"sde_version":"rubicon-1.3-95173",
+			"crius_industry":0,
+			"shortJump":0,
+			"thera":0,
+			"newSov":0
+		},
+		"Rubicon3": {
+			"release_date":"2013-12-03",
+			"sde_version":"rubicon-1.3-95173",
+			"crius_industry":0,
+			"shortJump":0,
+			"thera":0,
+			"newSov":0
+		},
+		"Rubicon2": {
+			"release_date":"2014-02-18",
+			"sde_version":"rubicon-1.2-94438",
+			"crius_industry":0,
+			"shortJump":0,
+			"thera":0,
+			"newSov":0
+		},
+		"Rubicon1": {
+			"release_date":"2014-04-13",
+			"sde_version":"rubicon-1.1-94321",
+			"crius_industry":0,
+			"shortJump":0,
+			"thera":0,
+			"newSov":0
+		},
+		"Rubicon": {
+			"release_date":"2013-11-19",
+			"sde_version":"rubicon-1.0.4-93577",
+			"crius_industry":0,
+			"shortJump":0,
+			"thera":0,
+			"newSov":0
+		},
+		"Odyssey2": {
+			"release_date":"2013-10-22",
+			"sde_version":"odyssey-1.1-91288",
+			"crius_industry":0,
+			"shortJump":0,
+			"thera":0,
+			"newSov":0
+		},
+		"Odyssey1": {
+			"release_date":"2013-09-03",
+			"sde_version":"odyssey-1.1-91288",
+			"crius_industry":0,
+			"shortJump":0,
+			"thera":0,
+			"newSov":0
+		},
+		"Odyssey": {
+			"release_date":"2013-06-04",
+			"sde_version":"odyssey-1.0.12-89967-fixed",
+			"crius_industry":0,
+			"shortJump":0,
+			"thera":0,
+			"newSov":0
+		}
+	}
+}

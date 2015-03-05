@@ -127,11 +127,11 @@ region_list = {
 
 trunc_region_list = {
 	'10000002':'The Forge',
-	'10000043':'Domain',
-	'10000030':'Heimatar',
-	'10000032':'Sinq Laison',
-	'10000042':'Metropolis',
-	'11000031':'Thera'
+	#'10000043':'Domain',
+	#'10000030':'Heimatar',
+	#'10000032':'Sinq Laison',
+	#'10000042':'Metropolis',
+	#'11000031':'Thera'
 	}
 
 region_name_maxlen = max( len( r ) for r in region_list.values() ) + 1
