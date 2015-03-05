@@ -261,6 +261,7 @@ def fetch_and_plot(data_struct, which_flags, TA_args = "", region=10000002):
 		importr('quantmod',robject_translations = {'skeleton.TA':'skeletonTA'})
 		importr('data.table')
 		importr('RODBC')
+		importr('ggplot2')
 		robjects.r("emd <- odbcConnect('evemarketdata')")
 
 		R_configured = True
@@ -346,6 +347,25 @@ def fetch_and_plot(data_struct, which_flags, TA_args = "", region=10000002):
 			except:
 				pass
 
+def plot_custom_charts():
+	#Runs custom ggplot index plots.  Each plot is 'manual'
+	global R_configured, basedir
+	if not R_configured:
+		print 'Setting up R libraries'
+		importr('jsonlite')
+		importr('quantmod',robject_translations = {'skeleton.TA':'skeletonTA'})
+		importr('data.table')
+		importr('RODBC')
+		importr('ggplot2')
+		robjects.r("emd <- odbcConnect('evemarketdata')")
+
+		R_configured = True
+	print 'setting up dump path'
+	out_dir = os.path.join(basedir, 'indexes', today, which_flags)
+	if not os.path.exists(out_dir):
+		os.makedirs(out_dir)
+		
+		
 def main(region):
 	report_sigmas = [
 		-2.5,

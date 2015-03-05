@@ -3,6 +3,7 @@
         "width": 1600,
         "height": 900,
         "format": "png",
+		"query_length": 90
         "db_schema": "proteus-1.0-109795",
         "db_host": "127.0.0.1",
         "db_user": "root",
