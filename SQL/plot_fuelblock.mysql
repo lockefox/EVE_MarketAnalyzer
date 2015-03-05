@@ -1,0 +1,11 @@
+SELECT price_date,regionid,
+	IF(itemid = 4051, "Caldari Fuel Block",
+    IF(itemid = 4246, "Minmatar Fuel Block",
+    IF(itemid = 4247, "Amarr Fuel Block",
+    IF(itemid = 4312, "Gallente Fuel Block",NULL)))) AS `product`,
+	avgPrice AS `price`
+FROM crest_markethistory 
+WHERE regionid = 10000002
+AND itemid in (4051,4246,4247,4312,44,3683,3689,9832,9848,16272,16273)
+AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL 90 DAY
+GROUP BY price_date,regionid,`product`
