@@ -367,6 +367,7 @@ def plot_custom_charts():
 		
 		
 def main(region):
+	 
 	report_sigmas = [
 		-2.5,
 		-2.0,
@@ -410,12 +411,12 @@ def main(region):
 		)
 	V.convert = convert
 	
-	#print 'Plotting Forced Group'
-	#R_config_file = open(conf.get('STATS','R_config_file'),'r')
-	#R_todo = json.load(R_config_file)
-	#fetch_and_plot(R_todo['forced_plots'], 'forced', ";addRSI();addLines(h=30, on=4);addLines(h=70, on=4)",region=region)
-	#robjects.r("close(emd)")
-	#sys.exit(0)
+	print 'Plotting Forced Group'
+	R_config_file = open(conf.get('STATS','R_config_file'),'r')
+	R_todo = json.load(R_config_file)
+	fetch_and_plot(R_todo['forced_plots'], 'forced', ";addRSI();addLines(h=30, on=4);addLines(h=70, on=4)",region=region)
+	robjects.r("close(emd)")
+	sys.exit(0)
 	
 	market_data_groups = fetch_market_data(region=region)
 	V.market_data_groups = market_data_groups
@@ -524,9 +525,13 @@ def hist_compare(itemid, desired=['price_delta_smm','price_delta_sma']):
 if __name__ == "__main__":
 	import multiprocessing
 	procs = []
-	regions = trunc_region_list.keys()
-	p = multiprocessing.Pool(len(regions))
-	p.map(main, regions)
+	stats_regions = conf.get('STATS','stats_regions')
+	regions = stats_regions.split(',')
+	for region in regions:
+		print 'Processing %s' % region_list[region]
+		main(region)
+	#p = multiprocessing.Pool(len(regions))
+	#p.map(main, regions)
 
 # 30633 = wrecked weapon subroutines
 # 12801 = Javelin M

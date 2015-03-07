@@ -8,5 +8,5 @@ SELECT price_date,regionid,
 FROM crest_markethistory 
 WHERE regionid = 10000002
 AND itemid in (16274,17887,17888,17889)
-AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL 90 DAY
+AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL 100 DAY
 GROUP BY price_date,regionid,`product`
