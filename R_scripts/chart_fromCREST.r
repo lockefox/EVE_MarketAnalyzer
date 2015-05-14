@@ -11,7 +11,7 @@ SDE <- odbcConnect('sde_lookup')
 query <- paste0("SELECT typeName FROM invtypes WHERE typeid=",item_id)
 sqldata <- sqlQuery(SDE, query)
 item_title <- sqldata$typeName[1]
-#item_title <- "PLEX"
+item_title <- "PLEX"
 query_addr = paste0("http://public-crest.eveonline.com/market/",region_id,"/types/",item_id,"/history/")
 market.json <- fromJSON(readLines(query_addr))
 market.data.json <- data.table(market.json$items)
@@ -36,5 +36,5 @@ market.data.ts <- xts(market.data[,-1,with=F], order.by=market.data[,Date], peri
 chartSeries(market.data.ts,
             name = graph_title,
             TA = "addBBands(15,2);addVo();addMACD(5,15,5);addRSI();addLines(h=30, on=4);addLines(h=70, on=4)"
-            ,subset = "last 90 days")
-#dev.off()
+            )#,subset = "last 90 days")
+dev.off()

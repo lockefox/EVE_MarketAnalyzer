@@ -1,7 +1,7 @@
 library(ggplot2)
 library(grid)
 library(RODBC)
-chart_name = "FuelBlock_ggplot4_2015-03-26.png"
+chart_name = paste0("FuelBlocks_",Sys.Date(),".png")
 
 emd <- odbcConnect('evemarketdata')
 fuel.query <- 'SELECT price_date,regionid,

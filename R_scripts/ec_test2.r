@@ -7,8 +7,10 @@ market_data2 <- read.csv("C:/Users/Lockefox/ec_pull_jita_2015-04-03-0100.csv", h
 market_data2$date <- as.Date(market_data2$date)
 market_data2$typeid <- as.factor(market_data2$typeid)
 market_data2$locationid <- as.factor(market_data2$locationid)
-filter_date <- "2015-03-10"
-x_intercepts <- as.POSIXlt(c("2015-03-19 00:00","2015-04-01 20:00","2015-05-05 13:00"))
+filter_date <- "2015-04-01"
+#x_intercepts <- as.POSIXlt(c("2015-03-19 00:00","2015-04-01 20:00","2015-05-05 13:00"))
+x_intercepts <- as.POSIXlt(c("2015-05-05 13:00"))
+
 chart_repo <- "C:/Users/Lockefox/Plots/"
 title_date <- Sys.Date()
 title_head <- "Buy/Sell Prices"

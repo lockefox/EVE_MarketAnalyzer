@@ -1,7 +1,7 @@
 library(ggplot2)
 library(grid)
 library(RODBC)
-chart_name = "Isotopes_ggplot_2015-03-26.png"
+chart_name = paste0("FuelIsotopes_",Sys.Date(),".png")
 
 emd <- odbcConnect('evemarketdata')
 fuel.query <- 'SELECT price_date,regionid,
@@ -14,7 +14,7 @@ fuel.query <- 'SELECT price_date,regionid,
 FROM crest_markethistory 
 WHERE regionid = 10000002
 AND itemid in (16274,17887,17888,17889)
-AND (SELECT max(price_date) FROM crest_markethistory) - INTERVAL 100 DAY
+AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL 100 DAY
 GROUP BY price_date,regionid,`product`'
 fuel_data <- sqlQuery(emd, fuel.query)
 
