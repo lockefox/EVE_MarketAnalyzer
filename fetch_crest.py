@@ -330,6 +330,7 @@ def _optimize_database():
 
 def main():
 	max_threads = 20
+	#max_threads = 100
 	threads_per_region = max_threads // len(trunc_region_list)
 	_validate_connection()
 	region_threads = launch_region_threads(trunc_region_list, threads_per_region)
