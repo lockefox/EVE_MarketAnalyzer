@@ -1,8 +1,11 @@
 SELECT typeid as itemid, typename as name
 FROM invtypes conv
 JOIN invgroups grp ON (conv.groupID = grp.groupID)
+-- JOIN dgmtypeattributes attr_vals ON (conv.typeID = attr_vals.typeID AND attr_vals.)
+-- JOIN dgmattributetypes attr_names
 WHERE marketgroupid IS NOT NULL
 AND conv.published = 1
 AND grp.categoryid NOT IN (9,16,350001,2)
-AND grp.groupid NOT IN (30,659,485,485,873,883)
+AND grp.groupid NOT IN (30,659,485,485,873,883,493,1248)
+
 ORDER BY itemid
