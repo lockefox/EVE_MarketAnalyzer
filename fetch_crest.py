@@ -80,8 +80,8 @@ def fetch_markethistory(regions={}, thread_id=(0,1), debug=False, testserver=Fal
 	 #remove typeid NOT IN eventualy
 	items_query = '''
 		SELECT typeid
-		FROM invtypes conv
-		JOIN invgroups grp ON (conv.groupID = grp.groupID)
+		FROM invTypes conv
+		JOIN invGroups grp ON (conv.groupID = grp.groupID)
 		WHERE marketgroupid IS NOT NULL
 		AND conv.published = 1
 		AND grp.categoryid NOT IN (9,16,350001,2)
