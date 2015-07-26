@@ -1,6 +1,6 @@
 #!/Python27/python.exe
 
-import sys, gzip, StringIO, sys, math, os, getopt, time, json, socket
+import sys, gzip, StringIO, sys, math, os, getopt, time, json, socket,glob
 from os import path, environ
 import urllib2
 import httplib
@@ -382,6 +382,12 @@ def _optimize_database():
 	data_conn, data_cur = connect_local_databases(db_schema)
 	data_cur.execute('''OPTIMIZE TABLE `%s`''' % crest_pricehistory).commit()
 	data_conn.close()
+	
+def _clean_dir():
+	thread_print( "Cleaning up progress/crash files" )
+	rm_list = glob.glob('*crest_progress*')
+	for file in rm_list:
+		os.remove(file)
 
 def main():
 	max_threads = thread_count
@@ -390,6 +396,7 @@ def main():
 	region_threads = launch_region_threads(trunc_region_list, threads_per_region)
 	wait_region_threads(region_threads)
 	_optimize_database()
+	_clean_dir()
 
 if __name__ == "__main__":
 	try:
