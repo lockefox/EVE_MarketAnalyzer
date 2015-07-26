@@ -1,6 +1,6 @@
 #!/Python27/python.exe
 
-import sys, gzip, StringIO, sys, math, os, getopt, time, json, socket
+import sys, gzip, StringIO, sys, math, os, getopt, time, json, socket,glob
 from os import path, environ
 import urllib2
 import httplib
@@ -8,6 +8,8 @@ import pypyodbc
 from datetime import datetime, timedelta
 import _strptime # because threading
 import threading
+import requests
+import random
 
 from ema_config import *
 thread_exit_flag = False
@@ -124,7 +126,8 @@ def fetch_markethistory(regions={}, thread_id=(0,1), debug=False, testserver=Fal
 					thread_print( '{0} skipped {1}'.format(fmt_name, i_skipped) )
 				continue #already processed data
 			
-			price_JSON = fetchURL_CREST(query, testserver, debug=False)
+			#price_JSON = fetchURL_CREST(query, testserver, debug=False)
+			price_JSON = fetchURL_request(query, testserver, debug=False)
 			
 			if len(price_JSON['items']) == 0: 
 				if debug: thread_print( '%s:\tEMPTY' % query )
@@ -177,6 +180,58 @@ def writeSQL(db_cur, table, headers_list, data_list, hard_overwrite=True, debug=
 	if debug: thread_print( insert_statement )
 	db_cur.execute(insert_statement).commit()
 	
+	
+def fetchURL_request(query, testserver=False, debug=False):
+	fetch_url = ''
+	if testserver: fetch_url = '%s%s' % (crest_test_path, query)
+	else: fetch_url = '%s%s' % (crest_path, query)
+	if debug: thread_print( fetch_url )
+	params = {
+		'accept-encoding' : 'gzip',
+		'user-agent'      : user_agent,
+	}
+	return_object = {}
+	fatal_error = True
+	for tries in range (0,retry_limit):
+		time.sleep(sleep_timer*tries)
+		try:
+			request = requests.get( fetch_url,
+									params  = params,
+									timeout = (default_timeout,default_readtimeout))
+			return_object = request.json()
+		except requests.exceptions.ConnectionError as e:
+			fatal_error = True
+			thread_print('connectionError:%s %s' % (e,fetch_url))
+			continue
+		except requests.exceptions.ConnectTimeout as e:	
+			fatal_error = True
+			thread_print('connectionTimeout:%s %s' % (e,fetch_url))
+			continue
+		except requests.exceptions.ReadTimeout as e:	
+			fatal_error = True
+			thread_print('readTimeout:%s %s' % (e,fetch_url))
+			continue
+		except ValueError:
+			fatal_error = True
+			thread_print('response not JSON')
+			raise
+		
+		if request.status_code == requests.codes.ok:
+			break
+		else:
+			fatal_error = False
+			if request.status_code == 503:
+				threading._sleep(random.random()/8.0)
+			else:
+				thread_print('HTTPError:%s %s' % (request.status_code,fetch_url))
+			continue 
+	else:
+		#thread_print( headers )
+		if fatal_error: sys.exit(2)
+		return {'items':[]}
+
+	return return_object
+			
 def fetchURL_CREST(query, testserver=False, debug=False):
 	import random
 	#Returns parsed JSON of CREST query
@@ -327,15 +382,21 @@ def _optimize_database():
 	data_conn, data_cur = connect_local_databases(db_schema)
 	data_cur.execute('''OPTIMIZE TABLE `%s`''' % crest_pricehistory).commit()
 	data_conn.close()
+	
+def _clean_dir():
+	thread_print( "Cleaning up progress/crash files" )
+	rm_list = glob.glob('*crest_progress*')
+	for file in rm_list:
+		os.remove(file)
 
 def main():
-	max_threads = 20
-	#max_threads = 100
+	max_threads = thread_count
 	threads_per_region = max_threads // len(trunc_region_list)
 	_validate_connection()
 	region_threads = launch_region_threads(trunc_region_list, threads_per_region)
 	wait_region_threads(region_threads)
 	_optimize_database()
+	_clean_dir()
 
 if __name__ == "__main__":
 	try:

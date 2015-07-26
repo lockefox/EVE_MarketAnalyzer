@@ -24,6 +24,7 @@ tick_delay = timedelta(seconds=10)
 tick_delay_dbg = timedelta(seconds=5)
 default_timeout = int(conf.get('GLOBALS','default_timeout'))
 default_readtimeout = int(conf.get('GLOBALS','default_readtimeout'))
+thread_count = int(conf.get('GLOBALS', 'thread_count'))
 ####DB STUFF####
 db_host   = conf.get('GLOBALS','db_host')
 db_user   = conf.get('GLOBALS','db_user')
