@@ -39,6 +39,16 @@ def fetch_data(sql_query_fileName, ODBC_connector_name):
 def split_data(pandas_object, split_column):
 	None
 	
+def getODBC_connection(ODBC_connector_name, 
+						host=None, user=None, passwd=None, port=None, db=None):
+	bool_easyConnect = False
+	if (host	== None and
+		user	== None and
+		passwd	== None and
+		port	== None and
+		db		== None):
+		bool_easyConnect = True #specific connection info not supplied, use ODBC config
+	
 def main():
 	None
 ############
