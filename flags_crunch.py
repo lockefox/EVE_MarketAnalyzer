@@ -34,7 +34,17 @@ class Flag(object):
 		#TODO: write ODBC writter.  
 		
 def fetch_data(sql_query_fileName, ODBC_connector_name):
-	None
+	local_con = None
+	local_cur = None
+	query_filePath = '%s/SQL/%s' % (localpath, sql_query_fileName)	
+	local_con, loca_cur = getODBC_connection(ODBC_connector_name)
+	query = open(query_filePath).read()
+	local_cur.execute(query)
+	
+	return_df = DataFrame(local_cur.fetchall())	#http://stackoverflow.com/questions/12047193/how-to-convert-sql-query-result-to-pandas-data-structure
+	return_df.colums = local_cur.keys()			#need to test
+	
+	return return_df
 	
 def split_data(pandas_object, split_column):
 	None
