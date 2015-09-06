@@ -83,8 +83,8 @@ def fetch_typeIDs():
 def writelog(locationID, message, push_email=False):
 	None
 	
-def _initSQL(table_name):
-	global db_con, db_cur, table_header
+def _initSQL(table_name, locationID):
+	global db_con, db_cur
 	
 	db_con = MySQLdb.connect(
 		host   = db_host,
@@ -96,7 +96,7 @@ def _initSQL(table_name):
 	db_cur.execute('''SHOW TABLES LIKE \'%s\'''' % table_name)
 	db_exists = len(db_cur.fetchall())
 	if db_exists:
-		print '%s.%s:\tGOOD' % (db_schema,table_name)
+		writelog(locationID, '%s.%s:\tGOOD' % (db_schema,table_name))
 	else:	#TODO: add override command to avoid 'drop table' command 
 		table_init = open(path.relpath('SQL/%s.mysql' % table_name) ).read()
 		table_init_commands = table_init.split(';')
@@ -106,16 +106,16 @@ def _initSQL(table_name):
 				db_con.commit()
 		except Exception as e:
 			#TODO: push critical errors to email log (SQL error)
-			print '%s.%s:\tERROR' % (db_schema, table_name)
-			print e[1]
+			writelog(locationID, '%s.%s:\tERROR: %s' % (db_schema, table_name, e[1]), True)
 			sys.exit(2)
-		print '%s.%s:\tCREATED' % (db_schema, table_name)
+		writelog(locationID, '%s.%s:\tCREATED' % (db_schema, table_name))
 	db_cur.execute('''SHOW COLUMNS FROM `%s`''' % table_name)
 	raw_headers = db_cur.fetchall()
 	tmp_headers = []
 	for row in raw_headers:
 		tmp_headers.append(row[0])
-		
+	
+	global table_header
 	table_header = ','.join(tmp_headers)
 
 def fetch_data(itemlist, locationID, debug=False):
@@ -156,7 +156,18 @@ def fetch_data(itemlist, locationID, debug=False):
 			print request.status_code
 			continue
 	else:
-		print 'going down in flames'
+		error_msg = '''ERROR: unhandled exception fetching from EC
+	url: {fetch_url}
+	itemList: {itemid_str}
+	Likely cases: 
+		-- SDE/typeID missmatch
+		-- Eve-Central is down'''
+		error_msg = error_msg.format(
+			fetch_url = fetch_url,
+			itemid_str = itemid_str
+			)
+		writelog(locationID, error_msg, True)
+		sys.exit(0)
 		#TODO: push critical error to email log (connection error)
 	return request.json()
 		
@@ -196,7 +207,15 @@ def writeSQL(JSON_obj, locationID, debug=False):
 		db_cur.execute(insert_statement)
 		db_con.commit()
 	except Exception, e:
-		None
+		error_str = '''ERROR: unable to insert into database
+	Error msg: {exception_val}
+	Commit str: {insert_statement}'''
+		error_str.format(
+			exception_val = e[1],
+			insert_statement = insert_statement
+			)
+		writelog(locationID, error_str, True)
+		sys.exit(2)
 		#TODO: push critical errors to email log (SQL error)
 
 def integrity_check(locationID, debug=False):
@@ -279,7 +298,7 @@ def integrity_check(locationID, debug=False):
 		#TODO: push critical errors to email log (SQL missing critical data)
 	else:
 		if debug: print "\tintegrity_check() passed"
-	
+			
 def main():
 	locationID = default_locationid
 	optimize_table = False
@@ -297,7 +316,7 @@ def main():
 		else:
 			assert False
 
-	_initSQL(snapshot_table)
+	_initSQL(snapshot_table, locationID)
 	
 	item_list = fetch_typeIDs()
 		
@@ -306,16 +325,21 @@ def main():
 	for itemid in item_list:
 		sub_list.append(itemid)
 		if len(sub_list) >= request_limit:
+			writelog(locationID, "fetching list: %s" % (','.join(sub_list)))
 			return_JSON = fetch_data(sub_list, locationID)
-			
+			writelog(locationID, "fetching list: SUCCESS")
 			writeSQL(return_JSON, locationID)
+			writelog(locationID, "writing list to DB: SUCCESS")
 			sub_list = []
 	if len(sub_list) > 0:
+		writelog(locationID, "fetching list: %s" % (','.join(sub_list)))
 		return_JSON = fetch_data(sub_list, locationID)
+		writelog(locationID, "fetching list: SUCCESS")
 		writeSQL(return_JSON, locationID)
-			
-	integrity_check(locationID)
+		writelog(locationID, "writing list to DB: SUCCESS")
 	
+	integrity_check(locationID)
+	writelog(locationID, "integrity_check() passed", False)
 	
 if __name__ == "__main__":
 	try:
