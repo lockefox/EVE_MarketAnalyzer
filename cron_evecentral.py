@@ -29,7 +29,8 @@ commit_time		= start_datetime.strftime('%H:%M:%S')
 default_locationid = int(conf.get('CRON', 'evecentral_defaultlocationid'))
 compressed_logging = int(conf.get('CRON', 'compressed_logging'))
 script_dir_path = "%s/logs/" % os.path.dirname(os.path.realpath(__file__))
-
+if not os.path.exists(script_dir_path):
+	os.makedirs(script_dir_path)
 #### MAIL STUFF ####
 email_source		= str(conf.get('LOGGING', 'email_source'))
 email_recipients	= str(conf.get('LOGGING', 'email_recipients'))
@@ -397,7 +398,7 @@ def main():
 		writelog(locationID, "writing list to DB: SUCCESS")
 		step_count += 1 
 	integrity_check(locationID)
-	writelog(locationID, "integrity_check() passed", True)
+	writelog(locationID, "integrity_check() passed", False)
 
 if __name__ == "__main__":
 	try:
