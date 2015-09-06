@@ -32,7 +32,7 @@ def thread_print(msg):
 	sys.stdout.write("%s\n" % msg)
 	sys.stdout.flush()
 	
-def query_locationType(locationID,switch=False):
+def query_locationType(locationID, switch=False):
 	#Returns supported query modifier.  Else blank to avoid bad calls
 	digit = str(locationID)[:1]
 	int_digit = int(digit)
@@ -70,7 +70,7 @@ def fetch_typeIDs():
 	sde_cur = sde_con.cursor()
 
 	query_filename = conf.get('CRON','evecentral_query')
-	query_filename = '%s/SQL/%s.mysql' % (localpath,query_filename)
+	query_filename = '%s/SQL/%s.mysql' % (localpath, query_filename)
 	item_query = open(query_filename).read()
 	sde_cur.execute(item_query)
 	raw_values = sde_cur.fetchall()
@@ -106,10 +106,10 @@ def _initSQL(table_name):
 				db_con.commit()
 		except Exception as e:
 			#TODO: push critical errors to email log (SQL error)
-			print '%s.%s:\tERROR' % (db_schema,table_name)
+			print '%s.%s:\tERROR' % (db_schema, table_name)
 			print e[1]
 			sys.exit(2)
-		print '%s.%s:\tCREATED' % (db_schema,table_name)
+		print '%s.%s:\tCREATED' % (db_schema, table_name)
 	db_cur.execute('''SHOW COLUMNS FROM `%s`''' % table_name)
 	raw_headers = db_cur.fetchall()
 	tmp_headers = []
@@ -120,9 +120,9 @@ def _initSQL(table_name):
 
 def fetch_data(itemlist, locationID, debug=False):
 	if debug: print "\tfetch_data()"
-	fetch_url = "%s%s" % (evecentral_url,fetch_type) 
+	fetch_url = "%s%s" % (evecentral_url, fetch_type) 
 	fetch_scope = query_locationType(locationID)
-	itemid_str = ','.join(map(str,itemlist))
+	itemid_str = ','.join(map(str, itemlist))
 	if debug: print len(itemlist)
 	if debug: print itemid_str
 	POST_values = {
@@ -132,7 +132,7 @@ def fetch_data(itemlist, locationID, debug=False):
 		'typeid'          : itemid_str
 		}
 	for tries in range (0,retry_limit):
-		time.sleep(sleep_timer*tries)
+		time.sleep(sleep_timer * tries)
 		try:
 			request = requests.post(fetch_url, 
 				data=POST_values,
@@ -184,7 +184,7 @@ def writeSQL(JSON_obj, locationID, debug=False):
 				commit_time,\
 				price_obj['forQuery']['types'][0],\
 				locationID,\
-				query_locationType(locationID,True),\
+				query_locationType(locationID, True),\
 				buy_or_sell,\
 				best_price,\
 				price_obj['avg'],\
@@ -274,7 +274,7 @@ def integrity_check(locationID, debug=False):
 	db_cur.execute(queryStr)
 	checklist_server = db_cur.fetchall()
 	if debug: print checklist_server
-	if(len(checklist_server) != len(checklist)*2):	#checklist_server = checklist*2 because buy_sell causes 2x rows
+	if(len(checklist_server) != (len(checklist) * 2)):	#checklist_server = checklist*2 because buy_sell causes 2x rows
 		print "Going down in flames"
 		#TODO: push critical errors to email log (SQL missing critical data)
 	else:
@@ -301,18 +301,18 @@ def main():
 	
 	item_list = fetch_typeIDs()
 		
-	request_limit = int(conf.get('CRON','evecentral_typelimit'))
+	request_limit = int(conf.get('CRON', 'evecentral_typelimit'))
 	sub_list = []
 	for itemid in item_list:
 		sub_list.append(itemid)
 		if len(sub_list) >= request_limit:
-			return_JSON = fetch_data(sub_list,locationID)
+			return_JSON = fetch_data(sub_list, locationID)
 			
-			writeSQL(return_JSON,locationID)
+			writeSQL(return_JSON, locationID)
 			sub_list = []
 	if len(sub_list) > 0:
-		return_JSON = fetch_data(sub_list,locationID)
-		writeSQL(return_JSON,locationID)
+		return_JSON = fetch_data(sub_list, locationID)
+		writeSQL(return_JSON, locationID)
 			
 	integrity_check(locationID)
 	
