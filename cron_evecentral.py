@@ -8,6 +8,7 @@ import MySQLdb
 #ODBC connector not supported on pi/ARM platform
 from datetime import datetime, timedelta
 import threading
+import smtplib	#for emailing logs 
 
 from ema_config import *
 thread_exit_flag = False
@@ -26,6 +27,7 @@ start_datetime = datetime.utcnow()
 commit_date = start_datetime.strftime('%Y-%m-%d')
 commit_time = start_datetime.strftime('%H:%M:%S')
 default_locationid = int(conf.get('CRON','evecentral_defaultlocationid'))
+compressed_logging = int(conf.get('CRON','compressed_logging'))
 script_dir_path = "%s/logs/" % os.path.dirname(os.path.realpath(__file__))
 
 def thread_print(msg):
@@ -81,8 +83,21 @@ def fetch_typeIDs():
 	return return_list
 	
 def writelog(locationID, message, push_email=False):
-	None
+	logtime = datetime.utcnow()
+	logtime_str = logtime.strftime('%Y-%m-%d %H:%M:%S')
 	
+	logfile = "%s%s-cron_evecentral" % (script_dir_path, locationID)
+	log_msg = "%s::%s\n" % (logtime_str,message)
+	if(compressed_logging):
+		with gzip.open("%s.gz" % logfile,'a') as myFile:
+			myFile.write(log_msg)
+	else:
+		with open("%s.log" % logfile,'a') as myFile:
+			myFile.write(log_msg)
+		
+	if(push_email):
+		None
+		
 def _initSQL(table_name, locationID):
 	global db_con, db_cur
 	
@@ -273,20 +288,24 @@ def integrity_check(locationID, debug=False):
 	for key,value in checklist.iteritems():
 		typeList = "%s,%s" % (typeList, key)	#TODO: reduce checklist to typeids for simple join?
 	typeList = typeList.lstrip(',')
-	if debug: print typeList	
+	if debug: print typeList
+
+	queryLen = len(checklist) * 4 #use LIMIT to help the integrity check come back faster?
 	
 	queryStr = '''SELECT * FROM {snapshot_table}
 	WHERE locationID = {locationID}
 	AND price_date = '{commit_date}'
 	AND price_time = '{commit_time}'
 	AND typeid IN ({typeList})
-	AND price_best IS NOT NULL'''
+	AND price_best IS NOT NULL
+	LIMIT {queryLen}'''
 	queryStr = queryStr.format(
 		snapshot_table = snapshot_table,
 		locationID = locationID,
 		commit_date = commit_date,
 		commit_time = commit_time,
-		typeList = typeList
+		typeList = typeList,
+		queryLen = queryLen
 		)
 	if debug: print queryStr
 	
@@ -322,25 +341,27 @@ def main():
 		
 	request_limit = int(conf.get('CRON', 'evecentral_typelimit'))
 	sub_list = []
+	step_count = 1
 	for itemid in item_list:
 		sub_list.append(itemid)
 		if len(sub_list) >= request_limit:
-			writelog(locationID, "fetching list: %s" % (','.join(sub_list)))
+			writelog(locationID, "fetching list STEP: %s" % (step_count))
 			return_JSON = fetch_data(sub_list, locationID)
 			writelog(locationID, "fetching list: SUCCESS")
 			writeSQL(return_JSON, locationID)
 			writelog(locationID, "writing list to DB: SUCCESS")
 			sub_list = []
+			step_count += 1
 	if len(sub_list) > 0:
-		writelog(locationID, "fetching list: %s" % (','.join(sub_list)))
+		writelog(locationID, "fetching list STEP: %s" % (step_count))
 		return_JSON = fetch_data(sub_list, locationID)
 		writelog(locationID, "fetching list: SUCCESS")
 		writeSQL(return_JSON, locationID)
 		writelog(locationID, "writing list to DB: SUCCESS")
-	
+		step_count += 1 
 	integrity_check(locationID)
 	writelog(locationID, "integrity_check() passed", False)
-	
+
 if __name__ == "__main__":
 	try:
 		main()

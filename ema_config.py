@@ -11,7 +11,7 @@ DEV_localpath = path.join(localpath,'init.ini')
 ALT_localpath = path.join(localpath,'init_local.ini')
 
 conf = ConfigParser.ConfigParser()
-conf.read([DEV_localpath,ALT_localpath])
+conf.read([ALT_localpath,DEV_localpath])
 
 ####GLOBALS####
 crest_path = conf.get('CREST','default_path')
