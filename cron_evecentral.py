@@ -18,17 +18,34 @@ db_cur = None
 
 #### PROGRAM GLOBALS ####
 itemlist = []
-snapshot_table = conf.get('TABLES','cron_evecentral')
-logfile_name = conf.get('CRON','evecentral_logfile') #add locationID to logfile name
-evecentral_url = conf.get('CRON','evecentral_baseURL')
-fetch_type = conf.get('CRON','evecentral_defaulttype')
-table_header = ''	#will be an issue if _initSQL is called multiple times
-start_datetime = datetime.utcnow()
-commit_date = start_datetime.strftime('%Y-%m-%d')
-commit_time = start_datetime.strftime('%H:%M:%S')
-default_locationid = int(conf.get('CRON','evecentral_defaultlocationid'))
-compressed_logging = int(conf.get('CRON','compressed_logging'))
+snapshot_table	= conf.get('TABLES', 'cron_evecentral')
+logfile_name	= conf.get('CRON', 'evecentral_logfile') #add locationID to logfile name
+evecentral_url	= conf.get('CRON', 'evecentral_baseURL')
+fetch_type		= conf.get('CRON', 'evecentral_defaulttype')
+table_header	= ''	#will be an issue if _initSQL is called multiple times
+start_datetime	= datetime.utcnow()
+commit_date		= start_datetime.strftime('%Y-%m-%d')
+commit_time		= start_datetime.strftime('%H:%M:%S')
+default_locationid = int(conf.get('CRON', 'evecentral_defaultlocationid'))
+compressed_logging = int(conf.get('CRON', 'compressed_logging'))
 script_dir_path = "%s/logs/" % os.path.dirname(os.path.realpath(__file__))
+
+#### MAIL STUFF ####
+email_source		= str(conf.get('LOGGING', 'email_source'))
+email_recipients	= str(conf.get('LOGGING', 'email_recipients'))
+email_username		= str(conf.get('LOGGING', 'email_username'))
+email_secret		= str(conf.get('LOGGING', 'email_secret'))
+email_server		= str(conf.get('LOGGING', 'email_server'))
+email_port			= str(conf.get('LOGGING', 'email_port'))
+
+#Test to see if all email vars are initialized
+#empty str() = False http://stackoverflow.com/questions/9573244/most-elegant-way-to-check-if-the-string-is-empty-in-python
+bool_email_init = ( bool(email_source.strip()) and\
+					bool(email_recipients.strip()) and\
+					bool(email_username.strip()) and\
+					bool(email_secret.strip()) and\
+					bool(email_server.strip()) and\
+					bool(email_port.strip()) )
 
 def thread_print(msg):
 	sys.stdout.write("%s\n" % msg)
@@ -95,8 +112,28 @@ def writelog(locationID, message, push_email=False):
 		with open("%s.log" % logfile,'a') as myFile:
 			myFile.write(log_msg)
 		
-	if(push_email):
-		None
+	if(push_email and bool_email_init):	#Bad day case
+		#http://stackoverflow.com/questions/10147455/trying-to-send-email-gmail-as-mail-provider-using-python
+		SUBJECT = '''cron_evecentral CRITICAL ERROR - %s''' % locationID
+		BODY = message
+		
+		EMAIL = '''\From: {email_source}\nTo: {email_recipients}\nSubject: {SUBJECT}\n\n{BODY}'''
+		EMAIL = EMAIL.format(
+			email_source = email_source,
+			email_recipients = email_recipients,
+			SUBJECT = SUBJECT,
+			BODY = BODY
+			)
+		try:
+			mailserver = smtplib.SMTP(email_server,email_port)
+			mailserver.ehlo()
+			mailserver.starttls()
+			mailserver.login(email_username, email_secret)
+			mailserver.sendmail(email_source, email_recipients.split(', '), EMAIL)
+			mailserver.close()
+			writelog(locationID, "SENT email with critical failure to %s" % email_recipients, False)
+		except:
+			writelog(locationID, "FAILED TO SEND EMAIL TO %s" % email_recipients, False)
 		
 def _initSQL(table_name, locationID):
 	global db_con, db_cur
@@ -360,7 +397,7 @@ def main():
 		writelog(locationID, "writing list to DB: SUCCESS")
 		step_count += 1 
 	integrity_check(locationID)
-	writelog(locationID, "integrity_check() passed", False)
+	writelog(locationID, "integrity_check() passed", True)
 
 if __name__ == "__main__":
 	try:
