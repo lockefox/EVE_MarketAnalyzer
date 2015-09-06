@@ -116,7 +116,8 @@ def _initSQL(table_name):
 		
 	table_header = ','.join(tmp_headers)
 
-def fetch_data(itemlist,locationID,debug=False):
+def fetch_data(itemlist, locationID, debug=True):
+	if debug: print "\tfetch_data()"
 	fetch_url = "%s%s" % (evecentral_url,fetch_type) 
 	fetch_scope = query_locationType(locationID)
 	itemid_str = ','.join(map(str,itemlist))
@@ -156,7 +157,8 @@ def fetch_data(itemlist,locationID,debug=False):
 		print 'going down in flames'
 	return request.json()
 		
-def writeSQL(JSON_obj,locationID, debug=False):
+def writeSQL(JSON_obj, locationID, debug=True):
+	if debug: print "\twriteSQL()"
 	insert_statement = '''INSERT IGNORE INTO %s (%s) VALUES''' % (snapshot_table, table_header)
 		##INSERT IGNORE generates warnings for collisions, not errors
 	for item_info in JSON_obj:
@@ -189,7 +191,63 @@ def writeSQL(JSON_obj,locationID, debug=False):
 	if debug: print insert_statement
 	db_cur.execute(insert_statement)
 	db_con.commit()
+
+def integrity_check(debug=True):
+	if debug: print "\tintegrity_check()"
+	checklist = {
+		29668	: "PLEX",
+		34		: "Tritanium",
+		35		: "Pyerite",
+		36		: "Mexallon",
+		37		: "Isogen",
+		38		: "Nocxium",
+		39		: "Zydrine",
+		40		: "Megacyte",
+		11399	: "Morphite",
+		16670	: "Crystalline Carbonide",
+		16671	: "Titanium Carbide",
+		16672	: "Tungsten Carbide",
+		16673	: "Fernite Carbide",
+		16678	: "Sylramic Fibers",
+		16679	: "Fullerides",
+		16680	: "Phenolic Composites",
+		16681	: "Nanotransistors",
+		16682	: "Hypersynaptic Fibers",
+		16683	: "Ferrogel",
+		17317	: "Fermionic Condensates",
+		33359	: "Photonic Metamaterials",
+		33360	: "Terahertz Metamaterials",
+		33361	: "Plasmonic Metamaterials",
+		33362	: "Nonlinear Metamaterials",
+		16633	: "Hydrocarbons",
+		16634	: "Atmospheric Gases",
+		16635	: "Evaporite Deposits",
+		16636	: "Silicates",
+		16637	: "Tungsten",
+		16638	: "Titanium",
+		16639	: "Scandium",
+		16640	: "Cobalt",
+		16641	: "Chromium",
+		16642	: "Vanadium",
+		16643	: "Cadmium",
+		16644	: "Platinum",
+		16646	: "Mercury",
+		16647	: "Caesium",
+		16648	: "Hafnium",
+		16649	: "Technetium",
+		16650	: "Dysprosium",
+		16651	: "Neodymium",
+		16652	: "Promethium",
+		16653	: "Thulium"
+	}
 	
+	typeList = ""
+	for key,value in checklist.iteritems():
+		typeList = "%s,%s" % (typeList, key)	#TODO: reduce checklist to typeids for simple join?
+	typeList = typeList.lstrip(',')
+	if debug: print typeList	
+	
+
 def main():
 	locationID = default_locationid
 	optimize_table = False
@@ -225,6 +283,8 @@ def main():
 		return_JSON = fetch_data(sub_list,locationID)
 		writeSQL(return_JSON,locationID)
 			
+	integrity_check()
+	
 	
 if __name__ == "__main__":
 	try:
