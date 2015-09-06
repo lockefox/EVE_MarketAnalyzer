@@ -1,5 +1,5 @@
 import sys, gzip, StringIO, sys, math, os, getopt, time, json, socket
-from os import path, environ
+#from os import path, environ, getcwd
 import urllib2
 import httplib
 import requests
@@ -26,6 +26,7 @@ start_datetime = datetime.utcnow()
 commit_date = start_datetime.strftime('%Y-%m-%d')
 commit_time = start_datetime.strftime('%H:%M:%S')
 default_locationid = int(conf.get('CRON','evecentral_defaultlocationid'))
+script_dir_path = "%s/logs/" % os.path.dirname(os.path.realpath(__file__))
 
 def thread_print(msg):
 	sys.stdout.write("%s\n" % msg)
@@ -79,7 +80,7 @@ def fetch_typeIDs():
 		return_list.append(int(row[0]))
 	return return_list
 	
-def writelog(locationID, message):
+def writelog(locationID, message, push_email=False):
 	None
 	
 def _initSQL(table_name):
@@ -104,6 +105,7 @@ def _initSQL(table_name):
 				db_cur.execute(command)
 				db_con.commit()
 		except Exception as e:
+			#TODO: push critical errors to email log (SQL error)
 			print '%s.%s:\tERROR' % (db_schema,table_name)
 			print e[1]
 			sys.exit(2)
@@ -116,7 +118,7 @@ def _initSQL(table_name):
 		
 	table_header = ','.join(tmp_headers)
 
-def fetch_data(itemlist, locationID, debug=True):
+def fetch_data(itemlist, locationID, debug=False):
 	if debug: print "\tfetch_data()"
 	fetch_url = "%s%s" % (evecentral_url,fetch_type) 
 	fetch_scope = query_locationType(locationID)
@@ -155,9 +157,10 @@ def fetch_data(itemlist, locationID, debug=True):
 			continue
 	else:
 		print 'going down in flames'
+		#TODO: push critical error to email log (connection error)
 	return request.json()
 		
-def writeSQL(JSON_obj, locationID, debug=True):
+def writeSQL(JSON_obj, locationID, debug=False):
 	if debug: print "\twriteSQL()"
 	insert_statement = '''INSERT IGNORE INTO %s (%s) VALUES''' % (snapshot_table, table_header)
 		##INSERT IGNORE generates warnings for collisions, not errors
@@ -189,11 +192,17 @@ def writeSQL(JSON_obj, locationID, debug=True):
 			insert_statement = '%s%s' % (insert_statement, insert_line)
 	insert_statement = insert_statement[:-1] #strip trailing ','
 	if debug: print insert_statement
-	db_cur.execute(insert_statement)
-	db_con.commit()
+	try:
+		db_cur.execute(insert_statement)
+		db_con.commit()
+	except Exception, e:
+		None
+		#TODO: push critical errors to email log (SQL error)
 
-def integrity_check(debug=True):
+def integrity_check(locationID, debug=False):
 	if debug: print "\tintegrity_check()"
+	###CRITICAL LIST OF ITEMS FOR INTEGRITY CHECKING###
+	#	mysql does not give a useful error code for full HDD 
 	checklist = {
 		29668	: "PLEX",
 		34		: "Tritanium",
@@ -247,7 +256,30 @@ def integrity_check(debug=True):
 	typeList = typeList.lstrip(',')
 	if debug: print typeList	
 	
-
+	queryStr = '''SELECT * FROM {snapshot_table}
+	WHERE locationID = {locationID}
+	AND price_date = '{commit_date}'
+	AND price_time = '{commit_time}'
+	AND typeid IN ({typeList})
+	AND price_best IS NOT NULL'''
+	queryStr = queryStr.format(
+		snapshot_table = snapshot_table,
+		locationID = locationID,
+		commit_date = commit_date,
+		commit_time = commit_time,
+		typeList = typeList
+		)
+	if debug: print queryStr
+	
+	db_cur.execute(queryStr)
+	checklist_server = db_cur.fetchall()
+	if debug: print checklist_server
+	if(len(checklist_server) != len(checklist)*2):	#checklist_server = checklist*2 because buy_sell causes 2x rows
+		print "Going down in flames"
+		#TODO: push critical errors to email log (SQL missing critical data)
+	else:
+		if debug: print "\tintegrity_check() passed"
+	
 def main():
 	locationID = default_locationid
 	optimize_table = False
@@ -268,8 +300,7 @@ def main():
 	_initSQL(snapshot_table)
 	
 	item_list = fetch_typeIDs()
-	
-	
+		
 	request_limit = int(conf.get('CRON','evecentral_typelimit'))
 	sub_list = []
 	for itemid in item_list:
@@ -283,7 +314,7 @@ def main():
 		return_JSON = fetch_data(sub_list,locationID)
 		writeSQL(return_JSON,locationID)
 			
-	integrity_check()
+	integrity_check(locationID)
 	
 	
 if __name__ == "__main__":
