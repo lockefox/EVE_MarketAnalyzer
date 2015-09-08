@@ -8,7 +8,12 @@ import pypyodbc
 from datetime import datetime
 
 import pandas as pd
+import pandas.io.sql as psql
+
 from ema_config import *
+
+### MODELS ###
+import models_crest
 
 class Flag(object):
 	def __init__ (self, typeID, typeName):
@@ -33,29 +38,25 @@ class Flag(object):
 		None
 		#TODO: write ODBC writter.  
 		
-def fetch_data(sql_query_fileName, ODBC_connector_name):
+def fetch_data(sql_query_fileName, ODBC_connector_name, date_key="", debug=True):
 	local_con = None
 	local_cur = None
 	query_filePath = '%s/SQL/%s' % (localpath, sql_query_fileName)	
-	local_con, loca_cur = getODBC_connection(ODBC_connector_name)
+
+	if debug: print "\tConnecting DB: %s" % ODBC_connector_name
+	local_con = pypyodbc.connect('DSN=%s' % ODBC_connector_name)
+	local_cur = local_con.cursor()
+	
+	if debug: print "\tReading query: %s" % sql_query_fileName
 	query = open(query_filePath).read()
-	local_cur.execute(query)
-	
-	return_df = DataFrame(local_cur.fetchall())	#http://stackoverflow.com/questions/12047193/how-to-convert-sql-query-result-to-pandas-data-structure
-	return_df.colums = local_cur.keys()			#need to test
-	
+
+	if debug: print "\t--Fetching data--"
+	return_df = psql.read_sql(query, local_con)
+		
 	return return_df
 	
-def split_data(pandas_object, split_column):
-	None
-	
-def getODBC_connection(ODBC_connector_name):	#Returns pair: connection/cursor for connection
-	db_con = pypyodbc.connect('DSN=%s' % ODBC_connector_name)
-	db_cur = db_con.cursor()
-	return (db_con, db_cur)
 	
 def main():
-	None
 ############
 #	#pseudocode framework
 #	pd_CREST_data = fetch_data("STAT_CRESTdata", "crest_ODBC") #returns pandas dataframe loaded from SQL
@@ -72,6 +73,9 @@ def main():
 #		Flag_obj.addFlag(CRESTmodel.price_vol(pd_singleType_data))
 #		Flag_obj.writeToSQL(_THREAD_odbc_connection, _THREAD_odbc_cursor)
 
+	crest_data = fetch_data("query_CRESTstats.mysql", conf.get('NEWSTATS','CREST_ODBC_DSN'))
+	print crest_data
+	
 if __name__ == "__main__":
 	try:
 		main()

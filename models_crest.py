@@ -10,6 +10,8 @@ from datetime import datetime
 import pandas as pd
 from ema_config import *
 
+from flags_crunch import Flag
+
 def main():
 	None
 
