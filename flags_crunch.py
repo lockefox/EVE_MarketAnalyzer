@@ -53,6 +53,9 @@ def fetch_data(sql_query_fileName, ODBC_connector_name, date_key="", debug=True)
 	if debug: print "\t--Fetching data--"
 	return_df = psql.read_sql(query, local_con)
 		
+	#Clean up after yourself#
+	local_con.close()
+	local_cur.close()
 	return return_df
 	
 	
