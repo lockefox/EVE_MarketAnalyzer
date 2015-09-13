@@ -22,6 +22,7 @@ snapshot_table	= conf.get('TABLES', 'cron_evecentral')
 logfile_name	= conf.get('CRON', 'evecentral_logfile') #add locationID to logfile name
 evecentral_url	= conf.get('CRON', 'evecentral_baseURL')
 fetch_type		= conf.get('CRON', 'evecentral_defaulttype')
+live_table_range= conf.get('CRON', 'live_table_range')
 table_header	= ''	#will be an issue if _initSQL is called multiple times
 start_datetime	= datetime.utcnow()
 commit_date		= start_datetime.strftime('%Y-%m-%d')
@@ -135,7 +136,7 @@ def writelog(locationID, message, push_email=False):
 			writelog(locationID, "SENT email with critical failure to %s" % email_recipients, False)
 		except:
 			writelog(locationID, "FAILED TO SEND EMAIL TO %s" % email_recipients, False)
-		
+
 def _initSQL(table_name, locationID):
 	global db_con, db_cur
 	
@@ -223,7 +224,7 @@ def fetch_data(itemlist, locationID, debug=False):
 		sys.exit(0)
 		#TODO: push critical error to email log (connection error)
 	return request.json()
-		
+
 def writeSQL(JSON_obj, locationID, debug=False):
 	if debug: print "\twriteSQL()"
 	insert_statement = '''INSERT IGNORE INTO %s (%s) VALUES''' % (snapshot_table, table_header)
@@ -269,7 +270,6 @@ def writeSQL(JSON_obj, locationID, debug=False):
 			)
 		writelog(locationID, error_str, True)
 		sys.exit(2)
-		#TODO: push critical errors to email log (SQL error)
 
 def integrity_check(locationID, debug=False):
 	if debug: print "\tintegrity_check()"
@@ -355,12 +355,16 @@ def integrity_check(locationID, debug=False):
 		#TODO: push critical errors to email log (SQL missing critical data)
 	else:
 		if debug: print "\tintegrity_check() passed"
-			
+
+def table_cleanup(locationID, live_range=live_table_range, debug=True):
+	None
+	
 def main():
+	global snapshot_table
 	locationID = default_locationid
-	optimize_table = False
+	table_cleanup = False
 	try:
-		opts, args = getopt.getopt(sys.argv[1:],'h:l', ['locationid=','optimize_table'])
+		opts, args = getopt.getopt(sys.argv[1:],'h:l', ['locationid=','cleanup','table_override='])
 	except getopt.GetoptError as e:
 		print str(e)
 		print 'unsupported argument'
@@ -369,7 +373,11 @@ def main():
 		if opt == '--locationid':
 			locationID = arg
 		elif opt == '--optimize_table':
-			optimize_table = True
+			table_cleanup = True
+			writelog(locationID, "Executing table cleanup" % snapshot_table)
+		elif opt == '--table_override':
+			snapshot_table = arg
+			writelog(locationID, "write table changed to: `%s`" % snapshot_table)
 		else:
 			assert False
 
