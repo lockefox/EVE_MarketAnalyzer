@@ -264,7 +264,7 @@ def writeSQL(JSON_obj, locationID, debug=False):
 		error_str = '''ERROR: unable to insert into database
 	Error msg: {exception_val}
 	Commit str: {insert_statement}'''
-		error_str.format(
+		error_str = error_str.format(
 			exception_val = e[1],
 			insert_statement = insert_statement
 			)
@@ -356,8 +356,17 @@ def integrity_check(locationID, debug=False):
 	else:
 		if debug: print "\tintegrity_check() passed"
 
-def table_cleanup(locationID, live_range=live_table_range, debug=True):
-	None
+def cleanup_tables(locationID, live_range=live_table_range, debug=True):
+	queryStr = '''SELECT * FROM {snapshot_table}
+	WHERE price_date < (SELECT MAX(price_date) FROM [snapshot_table}) - INTERVAL {live_range} DAYS + 1'''
+	queryStr = queryStr.format(
+		snapshot_table = snapshot_table,
+		live_range = live_range
+		)
+	
+	if debug: print queryStr
+	
+	
 	
 def main():
 	global snapshot_table
@@ -407,6 +416,10 @@ def main():
 		step_count += 1 
 	integrity_check(locationID)
 	writelog(locationID, "integrity_check() passed", False)
+	
+	if table_cleanup: 
+		cleanup_tables(locationID)
+		writelog(locationID, "cleanup_tables() passed", False)
 
 if __name__ == "__main__":
 	try:
