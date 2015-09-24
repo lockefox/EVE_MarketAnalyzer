@@ -1,0 +1,36 @@
+{
+	"export_1": {
+		"export_import":"export",
+		"tables_to_run": {
+			"crest_markethistory": {
+				"ODBC_DSN":"crest_markethistory",
+				"query":"archive_crest_markethistory.mysql",
+				"create":"crest_markethistory.mysql"
+			},
+			"snapshot_evecentral": {
+				"ODBC_DSN":"randomboy50_ec",
+				"query":"archive_snapshot_evecentral.mysql",
+				"create":"crest_markethistory.mysql"
+			}
+		},
+		"destination_DSN":"sqlite_connector",
+		"destructive_write":1
+	},
+	"import_1": {
+		"export_import":"import",
+		"tables_to_run": {
+			"crest_markethistory": {
+				"ODBC_DSN":"sqlite_connector",
+				"query":"ALL",
+				"create":"crest_markethistory.mysql"
+			},
+			"snapshot_evecentral": {
+				"ODBC_DSN":"sqlite_connector",
+				"query":"ALL",
+				"create":"crest_markethistory.mysql"
+			}
+		},
+		"destination_DSN":"eve_data",
+		"destructive_write":-1
+	}
+}
