@@ -60,7 +60,25 @@ def create_table ( db_con, db_cur, table_create_file, debug=gDebug ):
 			db_con.commit()
 	except Exception as e:
 		raise
-		
+	
+def pull_data ( odbc_dsn, table_name, query_file="ALL", debug=gDebug ):
+	queryStr = ""
+	if query_file == "ALL":
+		queryStr = '''SELECT * FROM {table_name}'''
+		queryStr = queryStr.format( table_name=table_name )
+	else:
+		query_path = path.join( sql_file_path, query_file )
+		queryStr = open( query_path ).read()
+	if debug: print queryStr
+	
+	db_con = pypyodbc.connect( 'DSN=%s' % odbc_dsn )
+	db_cur = db_con.cursor()
+	
+	db_cur.execute(queryStr)
+	queryObj = db_cur.fetchall()
+	
+	return queryObj
+	
 def main():
 	global run_arg
 	global gDebug
@@ -99,9 +117,9 @@ def main():
 	
 	### Run through archive operations ###
 	for table_name,info_dict in config_info[run_arg]['tables_to_run'].iteritems():
-		ODBC_DSN = info_dict['ODBC_DSN']
-		query    = info_dict['query']
-		create   = info_dict['create']
+		ODBC_DSN   = info_dict['ODBC_DSN']
+		query_file = info_dict['query_file']
+		create     = info_dict['create']
 		
 		### Sort read/write ODBC handles ###
 		read_DSN  = ""
@@ -134,7 +152,7 @@ def main():
 			print "***Unable to connect to tables"
 			sys.exit(2)
 			
-		
+		table_data = pull_data( read_DSN, table_name, query_file, gDebug )
 		
 if __name__ == "__main__":
 	try:

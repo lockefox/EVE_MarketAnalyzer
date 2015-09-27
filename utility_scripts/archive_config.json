@@ -4,12 +4,12 @@
 		"tables_to_run": {
 			"crest_markethistory": {
 				"ODBC_DSN":"crest_markethistory",
-				"query":"archive_crest_markethistory.mysql",
+				"query_file":"archive_crest_markethistory.mysql",
 				"create":"crest_markethistory.mysql"
 			},
 			"snapshot_evecentral": {
 				"ODBC_DSN":"randomboy50_ec",
-				"query":"archive_snapshot_evecentral.mysql",
+				"query_file":"archive_snapshot_evecentral.mysql",
 				"create":"snapshot_evecentral.mysql"
 			}
 		},
@@ -22,12 +22,12 @@
 		"tables_to_run": {
 			"crest_markethistory": {
 				"ODBC_DSN":"sqlite_connector",
-				"query":"ALL",
+				"query_file":"ALL",
 				"create":"crest_markethistory.sqlite"
 			},
 			"snapshot_evecentral": {
 				"ODBC_DSN":"sqlite_connector",
-				"query":"ALL",
+				"query_file":"ALL",
 				"create":"snapshot_evecentral.sqlite"
 			}
 		},
