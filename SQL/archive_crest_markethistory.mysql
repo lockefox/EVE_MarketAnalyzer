@@ -1,4 +1,4 @@
 SELECT *
 FROM crest_markethistory
 WHERE regionID = 10000002
-AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL 366 DAY
+AND price_date > (SELECT max(price_date) FROM crest_markethistory) - INTERVAL 60 DAY
