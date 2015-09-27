@@ -35,6 +35,19 @@
 			"destination_DSN":"eve_data",
 			"destructive_write":-1,
 			"clean_up_archived_data": 0
+		},
+		"test": {
+			"export_import":"export",
+			"tables_to_run": {
+				"crest_markethistory": {
+					"ODBC_DSN":"sqlite_connector",
+					"query_file":"ALL",
+					"create":"crest_markethistory.mysql"
+				}
+			},
+			"destination_DSN":"eve_data",
+			"destructive_write":-1,
+			"clean_up_archived_data": 0
 		}
 	},
 	"tables": {
