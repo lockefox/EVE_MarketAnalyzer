@@ -40,13 +40,13 @@
 			"export_import":"export",
 			"tables_to_run": {
 				"crest_markethistory": {
-					"ODBC_DSN":"sqlite_connector",
-					"query_file":"ALL",
-					"create":"crest_markethistory.mysql"
+					"ODBC_DSN":"evemarketdata",
+					"query_file":"archive_crest_markethistory.mysql",
+					"create":"crest_markethistory.sqlite"
 				}
 			},
-			"destination_DSN":"eve_data",
-			"destructive_write":-1,
+			"destination_DSN":"sqlite_connector",
+			"destructive_write":1,
 			"clean_up_archived_data": 0
 		}
 	},

@@ -147,7 +147,10 @@ def main():
 		else:
 			print "***Unsupported export_import value: %s" % export_import
 			sys.exit(2)
+		if debug: print "\tREAD = %s.%s" % (read_DSN, table_name)
+		if debug: print "\tWRITE = %s.%s" % (write_DSN, table_name)
 		
+		#sys.exit()
 		### test/configure WRITE location ###
 		write_table_ok = False
 		if destructive_write == 1: #TODO: better method to control table DROP
