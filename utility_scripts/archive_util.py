@@ -51,6 +51,7 @@ def test_connection( odbc_dsn, table_name, table_create_file="", debug=gDebug ):
 def create_table ( db_con, db_cur, table_create_file, debug=gDebug ):
 	global sql_file_path
 	table_filepath = path.join( sql_file_path, table_create_file ) 
+	if debug: print table_filepath 
 	table_create_query = open( table_filepath ).read()
 	table_create_commands = table_create_query.split(';')
 	try:
@@ -59,7 +60,12 @@ def create_table ( db_con, db_cur, table_create_file, debug=gDebug ):
 			db_cur.execute( command )
 			db_con.commit()
 	except Exception as e:
-		raise
+		if e[0] == "HY090":
+			print "***Suppressed HY090 ERR: Invalid string or buffer length"
+			### environment issue.  creates table, but SQLite ODBC connector has a driver issue ###
+			### If table is not created, test read will fail ###
+		else:
+			raise
 
 def get_headers ( table_name, debug=gDebug ):
 	None
@@ -107,14 +113,14 @@ def main():
 	debug = gDebug
 	
 	try:
-		config_info[run_arg]
+		config_info['args'][run_arg]
 	except KeyError as e:
 		print "Invalid config '%s'" % run_arg
 		sys.exit(2)
 	print "running profile: %s" % run_arg	
 	if debug: print "archive_config_path = %s" % archive_config_path
 	if debug: print "sql_file_path = %s" % sql_file_path	
-	if debug: print config_info[run_arg]
+	if debug: print config_info['args'][run_arg]
 	
 	### Config information ###
 	export_import          =      config_info['args'][run_arg]['export_import'].lower()
@@ -123,11 +129,12 @@ def main():
 	clean_up_archived_data = int( config_info['args'][run_arg]['clean_up_archived_data'] )
 	
 	### Run through archive operations ###
-	for table_name,info_dict in config_info[run_arg]['tables_to_run'].iteritems():
+	for table_name,info_dict in config_info['args'][run_arg]['tables_to_run'].iteritems():
 		ODBC_DSN   = info_dict['ODBC_DSN']
 		query_file = info_dict['query_file']
 		create     = info_dict['create']
 		
+		print "Testing connections"
 		### Sort read/write ODBC handles ###
 		read_DSN  = ""
 		write_DSN = ""
@@ -147,18 +154,26 @@ def main():
 			write_table_ok = test_connection( write_DSN, table_name, create, debug )
 		else:
 			write_table_ok = test_connection( write_DSN, table_name, "", debug )
-	
+		
+		if write_table_ok:
+			print "Validated table connection"
+			print "\tWRITE=%s.%s" % (write_DSN, table_name)
+		else:
+			print "***Unable to connect to table: %s.%s" % (write_DSN, table_name)
+			sys.exit(2)
+			
 		### test/configure READ location ###
 		read_table_ok = False
 		read_table_ok = test_connection( read_DSN, table_name, "", debug )
 		
-		if write_table_ok && read_table_ok:
-			print "Validated table connections"
-			print "\tREAD=%s.%s\tWRITE=%s.%s" % (read_DSN, table_name, write_DSN, table_name)
+		if read_table_ok:
+			print "Validated table connection"
+			print "\tREAD=%s.%s" % (read_DSN, table_name)
 		else:
-			print "***Unable to connect to tables"
+			print "***Unable to connect to table: %s.%s" % (read_DSN, table_name)
 			sys.exit(2)
 			
+		print "Pulling data for archive"
 		### Fetch data for import/export ###
 		table_data = pull_data( read_DSN, table_name, query_file, gDebug )
 		

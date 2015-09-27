@@ -1,12 +1,11 @@
-DROP TABLE IF EXISTS `snapshot_evecentral`;
-CREATE TABLE `snapshot_evecentral` (
+DROP TABLE IF EXISTS `crest_markethistory`;
+CREATE TABLE `crest_markethistory` (
 	`price_date`	DATE		NOT NULL,
-	`price_time`	TIME		NOT NULL,
-	`typeid`		INT(8)		NOT NULL,
-	`locationid`	INT(8)		NOT NULL,
-	`location_type` TEXT		NULL,
-	`buy_sell`		TINYINT(1)	NOT NULL DEFAULT 0, -- 0=sell, 1=buy
-	`price_best`	FLOAT(14,2)	NULL, -- BUY_MAX, SELL_MIN
-	`price_avg`		FLOAT(14,2)	NULL,
-	`order_volume`  BIGINT(12)	NULL,
-	PRIMARY KEY (price_date,price_time,typeid,locationid,buy_sell))
+	`itemid`		INT(8)		NOT NULL,
+	`regionid`		INT(8)		NOT NULL,
+	`orders`		INT(8)		NULL,
+	`volume`		BIGINT(12)	NULL,
+	`lowPrice`		FLOAT(13,2)	NULL,
+	`highPrice`		FLOAT(13,2) NULL,
+	`avgPrice`		FLOAT(13,2) NULL,
+	PRIMARY KEY (price_date, itemid, regionid));
