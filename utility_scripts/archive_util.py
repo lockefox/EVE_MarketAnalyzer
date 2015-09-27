@@ -60,6 +60,9 @@ def create_table ( db_con, db_cur, table_create_file, debug=gDebug ):
 			db_con.commit()
 	except Exception as e:
 		raise
+
+def get_headers ( table_name, debug=gDebug ):
+	None
 	
 def pull_data ( odbc_dsn, table_name, query_file="ALL", debug=gDebug ):
 	queryStr = ""
@@ -75,9 +78,13 @@ def pull_data ( odbc_dsn, table_name, query_file="ALL", debug=gDebug ):
 	db_cur = db_con.cursor()
 	
 	db_cur.execute(queryStr)
-	queryObj = db_cur.fetchall()
+	dataObj = db_cur.fetchall()
 	
-	return queryObj
+	db_con.close()	#all connections are function-only
+	return dataObj
+
+def write_data ( dataObj, odbc_dsn, table_name, debug=gDebug ):
+	None 
 	
 def main():
 	global run_arg
@@ -110,10 +117,10 @@ def main():
 	if debug: print config_info[run_arg]
 	
 	### Config information ###
-	export_import          =      config_info[run_arg]['export_import'].lower()
-	destination_DSN        =      config_info[run_arg]['destination_DSN']
-	destructive_write      = int( config_info[run_arg]['destructive_write'] )
-	clean_up_archived_data = int( config_info[run_arg]['clean_up_archived_data'] )
+	export_import          =      config_info['args'][run_arg]['export_import'].lower()
+	destination_DSN        =      config_info['args'][run_arg]['destination_DSN']
+	destructive_write      = int( config_info['args'][run_arg]['destructive_write'] )
+	clean_up_archived_data = int( config_info['args'][run_arg]['clean_up_archived_data'] )
 	
 	### Run through archive operations ###
 	for table_name,info_dict in config_info[run_arg]['tables_to_run'].iteritems():
@@ -152,6 +159,7 @@ def main():
 			print "***Unable to connect to tables"
 			sys.exit(2)
 			
+		### Fetch data for import/export ###
 		table_data = pull_data( read_DSN, table_name, query_file, gDebug )
 		
 if __name__ == "__main__":
