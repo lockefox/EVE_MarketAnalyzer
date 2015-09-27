@@ -45,6 +45,7 @@ def test_connection( odbc_dsn, table_name, table_create_file="", debug=gDebug ):
 		print "***test_connection() %s.%s failed: %s" % (odbc_dsn, table_name, e)
 		return_bool = False
 	
+	db_con.close()	#all connections are function-only
 	return return_bool
 
 def create_table ( db_con, db_cur, table_create_file, debug=gDebug ):
@@ -91,10 +92,10 @@ def main():
 	if debug: print config_info[run_arg]
 	
 	### Config information ###
-	export_import          = config_info[run_arg]['export_import']
-	destination_DSN        = config_info[run_arg]['destination_DSN']
-	destructive_write      = config_info[run_arg]['destructive_write']
-	clean_up_archived_data = config_info[run_arg]['clean_up_archived_data']
+	export_import          =      config_info[run_arg]['export_import'].lower()
+	destination_DSN        =      config_info[run_arg]['destination_DSN']
+	destructive_write      = int( config_info[run_arg]['destructive_write'] )
+	clean_up_archived_data = int( config_info[run_arg]['clean_up_archived_data'] )
 	
 	### Run through archive operations ###
 	for table_name,info_dict in config_info[run_arg]['tables_to_run'].iteritems():
@@ -102,12 +103,39 @@ def main():
 		query    = info_dict['query']
 		create   = info_dict['create']
 		
-		destination_table_ok = False
-		if destructive_write == 1 or export_import == 'import':	##bad way to control destructive vs exists checks
-			destination_table_ok = test_connection( ODBC_DSN, table_name, create, debug )
+		### Sort read/write ODBC handles ###
+		read_DSN  = ""
+		write_DSN = ""
+		if export_import == 'export':
+			read_DSN  = ODBC_DSN
+			write_DSN = destination_DSN
+		elif export_import == 'import':
+			read_DSN  = destination_DSN
+			write_DSN = ODBC_DSN
 		else:
-			destination_table_ok = test_connection( ODBC_DSN, table_name, "", debug )
+			print "***Unsupported export_import value: %s" % export_import
+			sys.exit(2)
+		
+		### test/configure WRITE location ###
+		write_table_ok = False
+		if destructive_write == 1: #TODO: better method to control table DROP
+			write_table_ok = test_connection( write_DSN, table_name, create, debug )
+		else:
+			write_table_ok = test_connection( write_DSN, table_name, "", debug )
 	
+		### test/configure READ location ###
+		read_table_ok = False
+		read_table_ok = test_connection( read_DSN, table_name, "", debug )
+		
+		if write_table_ok && read_table_ok:
+			print "Validated table connections"
+			print "\tREAD=%s.%s\tWRITE=%s.%s" % (read_DSN, table_name, write_DSN, table_name)
+		else:
+			print "***Unable to connect to tables"
+			sys.exit(2)
+			
+		
+		
 if __name__ == "__main__":
 	try:
 		main()
