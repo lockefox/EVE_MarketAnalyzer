@@ -43,6 +43,11 @@
 					"ODBC_DSN":"evemarketdata",
 					"query_file":"archive_crest_markethistory.mysql",
 					"create":"crest_markethistory.sqlite"
+				},
+				"snapshot_evecentral": {
+					"ODBC_DSN":"remote_ec",
+					"query_file":"archive_snapshot_evecentral.mysql",
+					"create":"snapshot_evecentral.sqlite"
 				}
 			},
 			"destination_DSN":"sqlite_connector",

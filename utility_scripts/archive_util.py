@@ -66,9 +66,6 @@ def create_table ( db_con, db_cur, table_create_file, debug=gDebug ):
 			### If table is not created, test read will fail ###
 		else:
 			raise
-
-def get_headers ( table_name, debug=gDebug ):
-	None
 	
 def pull_data ( odbc_dsn, table_name, query_file="ALL", debug=gDebug ):
 	queryStr = ""
@@ -89,7 +86,7 @@ def pull_data ( odbc_dsn, table_name, query_file="ALL", debug=gDebug ):
 	db_con.close()	#all connections are function-only
 	return dataObj
 
-def prepare_write_data ( dataObj, table_name, debug=gDebug ):
+def prepare_write_data ( dataObj, table_name, debug=gDebug ):	#TODO: easier way to pipe data from one to the other?
 	table_headers = config_info['tables'][table_name]['cols']
 	column_types  = config_info['tables'][table_name]['types']	#TODO: this is probably bad
 	
@@ -129,12 +126,13 @@ def prepare_write_data ( dataObj, table_name, debug=gDebug ):
 			print_single += 1
 	value_str = value_str.rstrip(',')
 	
-	duplicate_str = '''ON DUPLICATE KEY UPDATE '''
-	for header in table_headers:
-		duplicate_str = "%s %s=%s," % (duplicate_str, header, header)
-		
-	duplicate_str = duplicate_str.rstrip(',')
-	if debug: print duplicate_str
+	duplicate_str = ""
+	#duplicate_str = '''ON DUPLICATE KEY UPDATE '''
+	#for header in table_headers:
+	#	duplicate_str = "%s %s=%s," % (duplicate_str, header, header)
+	#	
+	#duplicate_str = duplicate_str.rstrip(',')
+	#if debug: print duplicate_str
 	commit_str = '''{write_str} {value_str} {duplicate_str}'''
 	commit_str = commit_str.format(
 					write_str     = write_str,
@@ -145,8 +143,13 @@ def prepare_write_data ( dataObj, table_name, debug=gDebug ):
 	return commit_str 
 	
 def write_SQL ( commit_str, odbc_dsn, table_name, debug=gDebug ):
-	None
+	db_con = pypyodbc.connect( 'DSN=%s' % odbc_dsn )
+	db_cur = db_con.cursor()
 	
+	db_cur.execute(commit_str).commit()
+	
+	db_con.close()
+
 def main():
 	global run_arg
 	global gDebug
@@ -221,8 +224,9 @@ def main():
 			sys.exit(2)
 			
 		### test/configure READ location ###
-		read_table_ok = False
-		read_table_ok = test_connection( read_DSN, table_name, "", debug )
+		#read_table_ok = False
+		read_table_ok = True
+		#read_table_ok = test_connection( read_DSN, table_name, "", debug )
 		
 		if read_table_ok:
 			print "Validated table connection"
@@ -240,7 +244,7 @@ def main():
 		write_string = prepare_write_data ( table_data, table_name, debug )
 		
 		print "Writing data to archive"
-		write_SQL ( write_string, write_DSN, debug )
+		write_SQL ( write_string, write_DSN, table_name, debug )
 if __name__ == "__main__":
 	try:
 		main()
