@@ -189,7 +189,6 @@ def main():
 	### Run through archive operations ###
 	for table_name,info_dict in config_info['args'][run_arg]['tables_to_run'].iteritems():
 		ODBC_DSN   = info_dict['ODBC_DSN']
-		query_file = info_dict['query_file']
 		create     = info_dict['create']
 		
 		print "Testing connections"
