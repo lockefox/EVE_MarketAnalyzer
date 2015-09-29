@@ -119,7 +119,67 @@ def pull_data ( odbc_dsn, table_name, query, date_str, debug ):
 	return dataObj
 
 def write_data ( odbc_dsn, table_name, dataObj, debug ):
-	None
+	table_headers = config_info['tables'][table_name]['cols']
+	column_types  = config_info['tables'][table_name]['types']	#TODO: this is probably bad
+	
+	write_str = '''INSERT INTO {table_name} ({table_headers}) VALUES'''
+	write_str = write_str.format(
+					table_name    = table_name,
+					table_headers = ','.join(table_headers)
+					)
+	
+	if debug: print write_str 
+	value_str = ""
+	print_single = 0
+	for row in dataObj:
+		col_index = 0	#for tracking headers
+		data_values = []
+		for col in row:
+			header   = table_headers[col_index]
+			dataType = column_types[header].lower()
+			data_str = ''
+			
+			if dataType == 'number':
+				data_str = str(col)
+			elif dataType == 'string':
+				data_str = "'%s'" % col
+			else:
+				print "***unsupported dataType: header=%s dataType=%s" % (header, dataType)
+			
+			data_values.append(data_str)
+			col_index += 1
+		tmp_value_str = ','.join(data_values)
+		tmp_value_str = tmp_value_str.rstrip(',')
+		#if debug: print tmp_value_str
+		value_str = "%s (%s)," % (value_str, tmp_value_str)
+		
+		if print_single < 1 and debug:
+			print value_str
+			print_single += 1
+	value_str = value_str.rstrip(',')
+	
+	duplicate_str = ""
+	#duplicate_str = '''ON DUPLICATE KEY UPDATE '''
+	#for header in table_headers:
+	#	duplicate_str = "%s %s=%s," % (duplicate_str, header, header)
+	#	
+	#duplicate_str = duplicate_str.rstrip(',')
+	#if debug: print duplicate_str
+	commit_str = '''{write_str} {value_str} {duplicate_str}'''
+	commit_str = commit_str.format(
+					write_str     = write_str,
+					value_str     = value_str, 
+					duplicate_str = duplicate_str
+					)
+	writeSQL ( odbc_dsn, commit_str, debug )
+	
+def writeSQL ( odbc_dsn, commit_str, debug ):
+	db_con = pypyodbc.connect( 'DSN=%s' % odbc_dsn )
+	db_cur = db_con.cursor()
+	
+	db_cur.execute(commit_str).commit()
+	
+	db_con.close()
 	
 def main():
 	global run_arg
@@ -191,6 +251,7 @@ def main():
 		if debug: print  dataObj[0]
 	
 		print "--Writing data out to archive %s.%s" % ( write_DSN, table_name )
+
 		write_data ( write_DSN, table_name, dataObj, debug )
 		
 		
