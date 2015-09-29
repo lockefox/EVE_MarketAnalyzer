@@ -99,11 +99,18 @@ def validate_query ( query, date_str, table_name ):
 	
 	if query.upper() == "ALL":
 		return_str = '''SELECT * FROM %s''' % ( table_name )
-	if "WHERE" in query.upper():
-		return_str = '''SELECT * FROM %s %s AND price_date>\'%s\'''' % ( table_name, query, date_str )
-	else:
-		return_str = '''SELECT * FROM %s WHERE %s AND price_date>\'%s\'''' % ( table_name, query, date_str )
-		
+	elif date_str:
+		if "WHERE" in query.upper():
+			return_str = '''SELECT * FROM %s %s AND price_date>\'%s\'''' % ( table_name, query, date_str )
+		else:
+			return_str = '''SELECT * FROM %s WHERE %s AND price_date>\'%s\'''' % ( table_name, query, date_str )
+	else: #in case no date_str is given (or otherwise blank/None
+		if "WHERE" in query.upper():
+			return_str = '''SELECT * FROM %s %s''' % ( table_name, query )
+		else:
+			return_str = '''SELECT * FROM %s WHERE %s''' % ( table_name, query )
+	
+
 	return return_str
 
 def pull_data ( odbc_dsn, table_name, query, date_str, debug ):
