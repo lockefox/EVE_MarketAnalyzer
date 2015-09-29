@@ -90,7 +90,36 @@ def check_table_contents ( odbc_dsn, table_name, date_range, debug ):
 		date_str = dbValue[0][0]
 	else:
 		date_str = max_date_str #explicitly pull maximum data
+	
+	db_con.close()
 	return date_str
+
+def validate_query ( query, date_str, table_name ):
+	return_str = ""
+	
+	if query.upper() == "ALL":
+		return_str = '''SELECT * FROM %s''' % ( table_name )
+	if "WHERE" in query.upper():
+		return_str = '''SELECT * FROM %s %s AND price_date>\'%s\'''' % ( table_name, query, date_str )
+	else:
+		return_str = '''SELECT * FROM %s WHERE %s AND price_date>\'%s\'''' % ( table_name, query, date_str )
+		
+	return return_str
+
+def pull_data ( odbc_dsn, table_name, query, date_str, debug ):
+	db_con = pypyodbc.connect( 'DSN=%s' % odbc_dsn )
+	db_cur = db_con.cursor()
+	
+	query_str = validate_query( query, date_str, table_name )
+	if debug: print "\t%s" % query_str
+	db_cur.execute( query_str )
+	dataObj = db_cur.fetchall()
+	
+	db_con.close()
+	return dataObj
+
+def write_data ( odbc_dsn, table_name, dataObj, debug ):
+	None
 	
 def main():
 	global run_arg
@@ -156,7 +185,14 @@ def main():
 		
 		print "--Testing %s.%s for existing data" % ( write_DSN, table_name )
 		date_str = check_table_contents ( write_DSN, table_name, date_range, debug )
+		
 		print "--Fetching data after %s on %s.%s" % ( date_str, read_DSN, table_name )
+		dataObj = pull_data( read_DSN, table_name, query, date_str, debug )
+		if debug: print  dataObj[0]
+	
+		print "--Writing data out to archive %s.%s" % ( write_DSN, table_name )
+		write_data ( write_DSN, table_name, dataObj, debug )
+		
 		
 if __name__ == "__main__":
 	try:
