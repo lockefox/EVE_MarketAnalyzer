@@ -53,6 +53,21 @@
 					"create":"crest_markethistory.sqlite",
 					"query":"SELECT * WHERE regionID=10000002",
 					"date_range":400
+				}
+			},
+			"destination_DSN":"sqlite_connector",
+			"destructive_write":1,
+			"clean_up_archived_data": 0
+		},
+		"test1": {
+			"export_import":"export",
+			"tables_to_run": {
+				"crest_markethistory": {
+					"table_name":"crest_markethistory",
+					"ODBC_DSN":"evemarketdata",
+					"create":"crest_markethistory.sqlite",
+					"query":"SELECT * WHERE regionID=10000002",
+					"date_range":400
 				},
 				"snapshot_evecentral": {
 					"table_name":"snapshot_evecentral",
