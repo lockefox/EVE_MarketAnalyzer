@@ -22,6 +22,7 @@ conf.read( [DEV_localpath, ALT_localpath] )
 #### PROGRAM GLOBALS ####
 run_arg = conf.get( 'ARCHIVE', 'default_run_arg' )
 gDebug = False
+nowTime = datetime.now()
 
 def test_connection ( odbc_dsn, table_name, table_create_file, debug=gDebug ):
 	try:
@@ -71,6 +72,26 @@ def create_table ( db_con, db_cur, table_create_file, debug=gDebug ):
 		else:
 			raise
 
+def check_table_contents ( odbc_dsn, table_name, date_range, debug ):
+	maxDate = nowTime - timedelta ( days=date_range )
+	max_date_str = maxDate.strftime( "%Y-%m-%d" )
+	date_str = max_date_str	#default to max range
+	
+	db_con = pypyodbc.connect( 'DSN=%s' % odbc_dsn )
+	db_cur = db_con.cursor()
+	
+	query_str = ''' SELECT max(price_date) FROM {table_name}'''#price_date needs to remain standardized!
+	query_str = query_str.format( table_name = table_name )
+	if debug: print "\t%s" % query_str
+	dbValue = db_cur.execute(query_str).fetchall()
+	
+	if dbValue[0][0]:	#if any value returned from query
+		if debug: print "\t%s" % dbValue
+		date_str = dbValue[0][0]
+	else:
+		date_str = max_date_str #explicitly pull maximum data
+	return date_str
+	
 def main():
 	global run_arg
 	global gDebug
@@ -133,6 +154,9 @@ def main():
 		print "\tWRITE = %s.%s" % ( write_DSN, table_name )
 		test_connection( write_DSN, table_name, create, debug )
 		
+		print "--Testing %s.%s for existing data" % ( write_DSN, table_name )
+		date_str = check_table_contents ( write_DSN, table_name, date_range, debug )
+		print "--Fetching data after %s on %s.%s" % ( date_str, read_DSN, table_name )
 		
 if __name__ == "__main__":
 	try:
