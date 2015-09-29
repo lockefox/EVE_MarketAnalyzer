@@ -42,6 +42,7 @@ def test_connection ( odbc_dsn, table_name, table_create_file, debug=gDebug ):
 			try:
 				print "***Trying to CREATE TABLE %s.%s" % ( odbc_dsn, table_name )
 				create_table( db_con, db_cur, table_create_file, debug )
+				db_cur.execute( test_query )	#retry test just in case
 			except Exception as err:
 				print "***ERROR: unable to create table %s.%s %s" % ( odbc_dsn, table_name, err)
 				sys.exit(2)
