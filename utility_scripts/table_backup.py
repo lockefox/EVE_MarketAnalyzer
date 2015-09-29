@@ -20,7 +20,8 @@ conf = ConfigParser.ConfigParser()
 conf.read( [DEV_localpath, ALT_localpath] )
 
 #### PROGRAM GLOBALS ####
-run_arg = conf.get( 'ARCHIVE', 'default_run_arg' )
+run_arg     =      conf.get( 'ARCHIVE', 'default_run_arg' )
+erase_delay = int( conf.get( 'ARCHIVE', 'erase_delay' ) )
 gDebug = False
 nowTime = datetime.now()
 
@@ -188,6 +189,39 @@ def writeSQL ( odbc_dsn, commit_str, debug ):
 	
 	db_con.close()
 	
+def delete_data ( odbc_dsn, table_name, before_or_after, query, date_str, debug ):
+	print "***Preparing to delete data %s %s in %s.%s***" % ( before_or_after, date_str, odbc_dsn, table_name )
+	time.sleep(erase_delay) #Allow user a moment to escape erase
+	
+	date_test = ""
+	if   before_or_after.lower() == "before":
+		date_test = "price_date<"
+	elif before_or_after.lower() == "after":
+		date_test = "price_date>"
+	else:
+		print "***ERROR: Unsupported before_or_after value: %s" % ( before_or_after )
+		sys.exit(2)
+		
+	query_str = ""
+	if query:
+		query_str = '''DELETE FROM {table_name} WHERE {query} AND {date_test}{date_str}'''
+		query_str = query_str.format(
+						table_name = table_name,
+						query      = query, 
+						date_test  = date_test,
+						date_str   = date_str
+						)
+	else:
+		query_str = '''DELETE FROM {table_name} WHERE {date_test}{date_str}'''
+		query_str = query_str.format(
+						table_name = table_name,
+						date_test  = date_test,
+						date_str   = date_str
+						)						
+	if debug: print "\t%s" % query_str
+	
+	writeSQL( odbc_dsn, query_str, debug ) 
+	
 def main():
 	global run_arg
 	global gDebug
@@ -219,11 +253,18 @@ def main():
 	if debug: print config_info['args'][run_arg]
 	
 	### Config information ###
-	export_import          =      config_info['args'][run_arg]['export_import'].lower()
-	destination_DSN        =      config_info['args'][run_arg]['destination_DSN']
-	destructive_write      = int( config_info['args'][run_arg]['destructive_write'] )
-	clean_up_archived_data = int( config_info['args'][run_arg]['clean_up_archived_data'] )
+	export_import     =      config_info['args'][run_arg]['export_import'].lower()
+	destination_DSN   =      config_info['args'][run_arg]['destination_DSN']
+	try:	#if not defined, assume no erasing!
+		clean_up_READ     = int( config_info['args'][run_arg]['clean_up_READ'] )
+	except KeyError as e:
+		clean_up_READ = 0
+	try: #if not defined, assume no erasing!
+		clean_up_WRITE    = int( config_info['args'][run_arg]['clean_up_WRITE'] )
+	except KeyError as e:
+		clean_up_WRITE = 0
 	
+	warning_override = False
 	### Run through archive operations ###
 	for table_name,info_dict in config_info['args'][run_arg]['tables_to_run'].iteritems():
 		print "--Preparing to back up: %s" % table_name
@@ -252,14 +293,44 @@ def main():
 		
 		print "--Testing %s.%s for existing data" % ( write_DSN, table_name )
 		date_str = check_table_contents ( write_DSN, table_name, date_range, debug )
-		
+		if query.upper() == "ALL":
+			prev_date_str = date_str
+			maxDate = nowTime - timedelta ( days=date_range )
+			date_str = maxDate.strftime( "%Y-%m-%d" )
+			print "***query=ALL, overriding date: from=%s to=%s" % ( prev_date_str, date_str )
+
 		print "--Fetching data after %s on %s.%s" % ( date_str, read_DSN, table_name )
 		dataObj = pull_data( read_DSN, table_name, query, date_str, debug )
-		if debug: print  dataObj[0]
-	
-		print "--Writing data out to archive %s.%s" % ( write_DSN, table_name )
-
-		write_data ( write_DSN, table_name, dataObj, debug )
+		
+		if dataObj:
+			print "--Writing data out to archive %s.%s" % ( write_DSN, table_name )
+			if debug: print  dataObj[0]
+			write_data ( write_DSN, table_name, dataObj, debug )
+		else:
+			print "***READ and WRITE tables already synchronized***"
+		
+		if clean_up_READ == 1:	#Cleans table archive was written FROM
+			print "***WARNING***Staged to delete archive data!!!"
+			before_or_after = "after"
+			user_ack = "" 
+			#TODO: ADD OVERRIDE FOR AUTOMATED ARCHIVE MANAGEMENT
+			user_ack = raw_input( "--SYSTEM WILL DELETE ARCHIVED DATA: AFTER %s IN %s.%s (y/n)" % ( date_str, read_DSN, table_name ) )
+			user_ack = user_ack.rstrip('\n')
+			if user_ack.lower() == "y" :	#or warning_override
+				delete_data ( read_DSN, table_name, before_or_after, query, date_str, debug )
+			else:
+				print "----user aborted delete operation.  No data affected in %s.%s" % ( read_DSN, table_name )
+		
+		if clean_up_WRITE == 1:	#Cleans table archive was written TO
+			print "***WARNING***Staged to delete archive data!!!"
+			before_or_after = "before"
+			#TODO: ADD OVERRIDE FOR AUTOMATED ARCHIVE MANAGEMENT
+			user_ack = raw_input( "--SYSTEM WILL DELETE ARCHIVED DATA: BEFORE %s IN %s.%s (y/n)" % ( date_str, write_DSN, table_name ) )
+			user_ack = user_ack.rstrip('\n')
+			if user_ack.lower() == "y" :	#or warning_override
+				delete_data ( write_DSN, table_name, before_or_after, query, date_str, debug )
+			else:
+				print "----user aborted delete operation.  No data affected in %s.%s" % ( read_DSN, table_name )
 		
 		
 if __name__ == "__main__":

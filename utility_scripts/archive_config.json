@@ -19,8 +19,8 @@
 				}
 			},
 			"destination_DSN":"sqlite_connector",
-			"destructive_write":1,
-			"clean_up_archived_data": 0
+			"clean_up_READ":0,
+			"clean_up_WRITE":0
 		},
 		"import_1": {
 			"export_import":"import",
@@ -29,35 +29,35 @@
 					"table_name":"crest_markethistory",
 					"ODBC_DSN":"sqlite_connector",
 					"create":"crest_markethistory.mysql",
-					"query":"WHERE regionID=10000002",
+					"query":"regionID=10000002",
 					"date_range":400
 				},
 				"snapshot_evecentral": {
 					"table_name":"snapshot_evecentral",
 					"ODBC_DSN":"sqlite_connector",
 					"create":"snapshot_evecentral.mysql",
-					"query":"WHERE regionID=30000142",
+					"query":"regionID=30000142",
 					"date_range":90
 				}
 			},
 			"destination_DSN":"eve_data",
-			"destructive_write":-1,
-			"clean_up_archived_data": 0
+			"clean_up_READ":0,
+			"clean_up_WRITE":0
 		},
 		"test": {
 			"export_import":"export",
 			"tables_to_run": {
 				"crest_markethistory": {
 					"table_name":"crest_markethistory",
-					"ODBC_DSN":"evemarketdata",
+					"ODBC_DSN":"sqlite_connector",
 					"create":"crest_markethistory.sqlite",
-					"query":"WHERE regionID=10000002",
+					"query":"regionID=10000002",
 					"date_range":400
 				}
 			},
-			"destination_DSN":"sqlite_connector",
-			"destructive_write":1,
-			"clean_up_archived_data": 0
+			"destination_DSN":"evemarketdata",
+			"clean_up_READ":1,
+			"clean_up_WRITE":0
 		},
 		"test1": {
 			"export_import":"export",
@@ -66,20 +66,20 @@
 					"table_name":"crest_markethistory",
 					"ODBC_DSN":"evemarketdata",
 					"create":"crest_markethistory.sqlite",
-					"query":"WHERE regionID=10000002",
+					"query":"regionID=10000002",
 					"date_range":400
 				},
 				"snapshot_evecentral": {
 					"table_name":"snapshot_evecentral",
 					"ODBC_DSN":"remote_ec",
 					"create":"snapshot_evecentral.sqlite",
-					"query":"WHERE regionID=30000142",
+					"query":"regionID=30000142",
 					"date_range":90
 				}
 			},
 			"destination_DSN":"sqlite_connector",
-			"destructive_write":1,
-			"clean_up_archived_data": 0
+			"clean_up_READ":0,
+			"clean_up_WRITE":0
 		}
 	},
 	"tables": {
