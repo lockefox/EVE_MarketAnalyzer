@@ -22,6 +22,7 @@ conf.read( [DEV_localpath, ALT_localpath] )
 #### PROGRAM GLOBALS ####
 run_arg     =      conf.get( 'ARCHIVE', 'default_run_arg' )
 erase_delay = int( conf.get( 'ARCHIVE', 'erase_delay' ) )
+write_mod   = int( conf.get( 'ARCHIVE', 'write_mod' ) )
 gDebug = False
 nowTime = datetime.now()
 
@@ -130,6 +131,11 @@ def write_data ( odbc_dsn, table_name, dataObj, debug ):
 	table_headers = config_info['tables'][table_name]['cols']
 	column_types  = config_info['tables'][table_name]['types']	#TODO: this is probably bad
 	
+	data_to_process = len( dataObj )
+	local_write_mod = write_mod
+	if write_mod == -1:
+		local_write_mod = data_to_process+10
+		
 	write_str = '''INSERT INTO {table_name} ({table_headers}) VALUES'''
 	write_str = write_str.format(
 					table_name    = table_name,
@@ -139,6 +145,7 @@ def write_data ( odbc_dsn, table_name, dataObj, debug ):
 	if debug: print write_str 
 	value_str = ""
 	print_single = 0
+	row_count = 0
 	for row in dataObj:
 		col_index = 0	#for tracking headers
 		data_values = []
@@ -164,22 +171,41 @@ def write_data ( odbc_dsn, table_name, dataObj, debug ):
 		if print_single < 1 and debug:
 			print value_str
 			print_single += 1
-	value_str = value_str.rstrip(',')
+			
+		if row_count % local_write_mod == 0:
+			if debug: print "Processed %s of %s\twriting to %s.%s" % ( row_count, data_to_process, odbc_dsn, table_name )
+			commit_str = '''{write_str} {value_str}'''
+			commit_str = commit_str.format(
+							write_str = write_str,
+							value_str = value_str.rstrip(',')
+							)
+			writeSQL ( odbc_dsn, commit_str, debug )
+			value_str = ""
+		row_count += 1
 	
-	duplicate_str = ""
+	if debug: print "Processed %s of %s\twriting to %s.%s" % ( row_count, data_to_process, odbc_dsn, table_name )
+	commit_str = '''{write_str} {value_str}'''
+	commit_str = commit_str.format(
+					write_str = write_str,
+					value_str = value_str.rstrip(',')
+					)
+	writeSQL ( odbc_dsn, commit_str, debug )
+	
+	#duplicate_str = ""
 	#duplicate_str = '''ON DUPLICATE KEY UPDATE '''
 	#for header in table_headers:
 	#	duplicate_str = "%s %s=%s," % (duplicate_str, header, header)
 	#	
 	#duplicate_str = duplicate_str.rstrip(',')
 	#if debug: print duplicate_str
-	commit_str = '''{write_str} {value_str} {duplicate_str}'''
-	commit_str = commit_str.format(
-					write_str     = write_str,
-					value_str     = value_str, 
-					duplicate_str = duplicate_str
-					)
-	writeSQL ( odbc_dsn, commit_str, debug )
+	#commit_str = '''{write_str} {value_str} {duplicate_str}'''
+	#commit_str = commit_str.format(
+	#				write_str     = write_str,
+	#				value_str     = value_str, 
+	#				duplicate_str = duplicate_str
+	#				)
+	#if debug: print "\twriting data to %s.%s" % ( odbc_dsn, table_name )
+	#writeSQL ( odbc_dsn, commit_str, debug )
 	
 def writeSQL ( odbc_dsn, commit_str, debug ):
 	db_con = pypyodbc.connect( 'DSN=%s' % odbc_dsn )
@@ -309,15 +335,17 @@ def main():
 		else:
 			print "***READ and WRITE tables already synchronized***"
 		
+		maxDate = nowTime - timedelta ( days=date_range )
+		cleanup_date_str = maxDate.strftime( "%Y-%m-%d" )
 		if clean_up_READ == 1:	#Cleans table archive was written FROM
 			print "***WARNING***Staged to delete archive data!!!"
 			before_or_after = "after"
 			user_ack = "" 
 			#TODO: ADD OVERRIDE FOR AUTOMATED ARCHIVE MANAGEMENT
-			user_ack = raw_input( "--SYSTEM WILL DELETE ARCHIVED DATA: AFTER %s IN %s.%s (y/n)" % ( date_str, read_DSN, table_name ) )
+			user_ack = raw_input( "--SYSTEM WILL DELETE ARCHIVED DATA: AFTER %s IN %s.%s (y/n)" % ( cleanup_date_str, read_DSN, table_name ) )
 			user_ack = user_ack.rstrip('\n')
 			if user_ack.lower() == "y" :	#or warning_override
-				delete_data ( read_DSN, table_name, before_or_after, query, date_str, debug )
+				delete_data ( read_DSN, table_name, before_or_after, query, cleanup_date_str, debug )
 			else:
 				print "----user aborted delete operation.  No data affected in %s.%s" % ( read_DSN, table_name )
 		
@@ -325,10 +353,10 @@ def main():
 			print "***WARNING***Staged to delete archive data!!!"
 			before_or_after = "before"
 			#TODO: ADD OVERRIDE FOR AUTOMATED ARCHIVE MANAGEMENT
-			user_ack = raw_input( "--SYSTEM WILL DELETE ARCHIVED DATA: BEFORE %s IN %s.%s (y/n)" % ( date_str, write_DSN, table_name ) )
+			user_ack = raw_input( "--SYSTEM WILL DELETE ARCHIVED DATA: BEFORE %s IN %s.%s (y/n)" % ( cleanup_date_str, write_DSN, table_name ) )
 			user_ack = user_ack.rstrip('\n')
 			if user_ack.lower() == "y" :	#or warning_override
-				delete_data ( write_DSN, table_name, before_or_after, query, date_str, debug )
+				delete_data ( write_DSN, table_name, before_or_after, query, cleanup_date_str, debug )
 			else:
 				print "----user aborted delete operation.  No data affected in %s.%s" % ( read_DSN, table_name )
 		
