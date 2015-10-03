@@ -191,11 +191,10 @@ def fetch_data(itemlist, locationID, debug=True):
 		try:
 			request = requests.post(fetch_url, 
 				data=POST_values,
-				timeout=(default_timeout,default_readtimeout))
-			request.json()
+				timeout=(default_timeout,default_readtimeout))			
 		except requests.exceptions.ConnectionError as e:
 			last_error = 'connectionError %s' % e
-			write_log( locationID, last_error )
+			writelog( locationID, last_error )
 			continue
 		except requests.exceptions.ConnectTimeout as e:	
 			last_error =  'connectionTimeout %s' % e
@@ -203,17 +202,19 @@ def fetch_data(itemlist, locationID, debug=True):
 			continue
 		except requests.exceptions.ReadTimeout as e:	
 			last_error = 'readTimeout %s' % e
-			write_log( locationID, last_error )
+			writelog( locationID, last_error )
 			continue
-		except ValueError:
-			last_error = 'response not JSON'
-			write_log( locationID, last_error )
-			continue
+		
 		if request.status_code == requests.codes.ok:
-			break
+			try:
+				request.json()
+			except ValueError:
+				last_error = 'response not JSON'
+				writelog( locationID, last_error )
+				continue
 		else:
-			last_error = 'bad status code: %s' request.status_code
-			write_log( locationID, last_error )
+			last_error = 'bad status code: %s' % request.status_code
+			writelog( locationID, last_error )
 			continue
 	else:
 		error_msg = '''ERROR: unhandled exception fetching from EC
@@ -225,7 +226,7 @@ def fetch_data(itemlist, locationID, debug=True):
 		-- Eve-Central is down'''
 		error_msg = error_msg.format(
 			fetch_url  = fetch_url,
-			itemid_str = itemid_str
+			itemid_str = itemid_str,
 			last_error = last_error
 			)
 		writelog(locationID, error_msg, True)
