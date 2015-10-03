@@ -172,7 +172,7 @@ def _initSQL(table_name, locationID):
 	global table_header
 	table_header = ','.join(tmp_headers)
 
-def fetch_data(itemlist, locationID, debug=False):
+def fetch_data(itemlist, locationID, debug=True):
 	if debug: print "\tfetch_data()"
 	fetch_url = "%s%s" % (evecentral_url, fetch_type) 
 	fetch_scope = query_locationType(locationID)
@@ -185,6 +185,7 @@ def fetch_data(itemlist, locationID, debug=False):
 		'user-agent'      : user_agent,
 		'typeid'          : itemid_str
 		}
+	last_error = ""
 	for tries in range (0,retry_limit):
 		time.sleep(sleep_timer * tries)
 		try:
@@ -193,32 +194,39 @@ def fetch_data(itemlist, locationID, debug=False):
 				timeout=(default_timeout,default_readtimeout))
 			request.json()
 		except requests.exceptions.ConnectionError as e:
-			print 'connectionError %s' % e
+			last_error = 'connectionError %s' % e
+			write_log( locationID, last_error )
 			continue
 		except requests.exceptions.ConnectTimeout as e:	
-			print 'connectionTimeout %s' % e
+			last_error =  'connectionTimeout %s' % e
+			write_log( locationID, last_error )
 			continue
 		except requests.exceptions.ReadTimeout as e:	
-			print 'readTimeout %s' % e
+			last_error = 'readTimeout %s' % e
+			write_log( locationID, last_error )
 			continue
 		except ValueError:
-			print 'response not JSON'
-			raise
+			last_error = 'response not JSON'
+			write_log( locationID, last_error )
+			continue
 		if request.status_code == requests.codes.ok:
 			break
 		else:
-			print request.status_code
+			last_error = 'bad status code: %s' request.status_code
+			write_log( locationID, last_error )
 			continue
 	else:
 		error_msg = '''ERROR: unhandled exception fetching from EC
 	url: {fetch_url}
 	itemList: {itemid_str}
+	errorMsg: {last_error}
 	Likely cases: 
 		-- SDE/typeID missmatch
 		-- Eve-Central is down'''
 		error_msg = error_msg.format(
-			fetch_url = fetch_url,
+			fetch_url  = fetch_url,
 			itemid_str = itemid_str
+			last_error = last_error
 			)
 		writelog(locationID, error_msg, True)
 		sys.exit(0)
