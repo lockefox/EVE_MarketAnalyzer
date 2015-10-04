@@ -172,7 +172,7 @@ def _initSQL(table_name, locationID):
 	global table_header
 	table_header = ','.join(tmp_headers)
 
-def fetch_data(itemlist, locationID, debug=True):
+def fetch_data(itemlist, locationID, debug=False):
 	if debug: print "\tfetch_data()"
 	fetch_url = "%s%s" % (evecentral_url, fetch_type) 
 	fetch_scope = query_locationType(locationID)
@@ -212,6 +212,7 @@ def fetch_data(itemlist, locationID, debug=True):
 				last_error = 'response not JSON'
 				writelog( locationID, last_error )
 				continue
+			break	#if all OK, break out of error checking
 		else:
 			last_error = 'bad status code: %s' % request.status_code
 			writelog( locationID, last_error )
