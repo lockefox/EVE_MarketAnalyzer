@@ -100,17 +100,30 @@ def validate_query ( query, date_str, table_name ):
 	return_str = ""
 	
 	if query.upper() == "ALL":
-		return_str = '''SELECT * FROM %s''' % ( table_name )
+		return_str = '''SELECT * FROM %s WHERE %s''' % ( table_name, date_str )
 	elif date_str:
 		if "WHERE" in query.upper():
-			return_str = '''SELECT * FROM %s %s AND price_date>\'%s\'''' % ( table_name, query, date_str )
+			return_str = '''SELECT * FROM %s %s AND %s''' % ( table_name, query, date_str )
 		else:
-			return_str = '''SELECT * FROM %s WHERE %s AND price_date>\'%s\'''' % ( table_name, query, date_str )
+			return_str = '''SELECT * FROM %s WHERE %s AND %s''' % ( table_name, query, date_str )
 	else: #in case no date_str is given (or otherwise blank/None
 		if "WHERE" in query.upper():
 			return_str = '''SELECT * FROM %s %s''' % ( table_name, query )
 		else:
 			return_str = '''SELECT * FROM %s WHERE %s''' % ( table_name, query )
+	
+	#if query.upper() == "ALL":
+	#	return_str = '''SELECT * FROM %s''' % ( table_name )
+	#elif date_str:
+	#	if "WHERE" in query.upper():
+	#		return_str = '''SELECT * FROM %s %s AND price_date>\'%s\'''' % ( table_name, query, date_str )
+	#	else:
+	#		return_str = '''SELECT * FROM %s WHERE %s AND price_date>\'%s\'''' % ( table_name, query, date_str )
+	#else: #in case no date_str is given (or otherwise blank/None
+	#	if "WHERE" in query.upper():
+	#		return_str = '''SELECT * FROM %s %s''' % ( table_name, query )
+	#	else:
+	#		return_str = '''SELECT * FROM %s WHERE %s''' % ( table_name, query )
 	
 
 	return return_str
@@ -298,7 +311,11 @@ def main():
 		create     = info_dict['create']
 		query      = info_dict['query']
 		date_range = info_dict['date_range']
-		
+		try:
+			sub_date_range = int( info_dict['sub_date_range'] )
+		except KeyError as e:
+			sub_date_range = date_range
+			
 		print "--Testing Connections"
 		read_DSN  = ""
 		write_DSN = ""
@@ -317,6 +334,12 @@ def main():
 		print "\tWRITE = %s.%s" % ( write_DSN, table_name )
 		test_connection( write_DSN, table_name, create, debug )
 		
+		if debug: 
+			user_ack = raw_input( "--CONFIG CORRECT? (y/n)"  )
+			user_ack = user_ack.rstrip('\n')
+			if user_ack.lower() != "y" :	#or warning_override
+				sys.exit(0)
+				
 		print "--Testing %s.%s for existing data" % ( write_DSN, table_name )
 		date_str = check_table_contents ( write_DSN, table_name, date_range, debug )
 		if query.upper() == "ALL":
@@ -324,17 +347,32 @@ def main():
 			maxDate = nowTime - timedelta ( days=date_range )
 			date_str = maxDate.strftime( "%Y-%m-%d" )
 			print "***query=ALL, overriding date: from=%s to=%s" % ( prev_date_str, date_str )
+		
+		date_str_dateTime = datetime.strptime( date_str, "%Y-%m-%d" )
+		total_range = nowTime - date_str_dateTime
 
-		print "--Fetching data after %s on %s.%s" % ( date_str, read_DSN, table_name )
-		dataObj = pull_data( read_DSN, table_name, query, date_str, debug )
+		date_query = ""
+		max_dateTime = date_str_dateTime
+		min_dateTime = date_str_dateTime
+		while max_dateTime < nowTime:
+			max_dateTime = max_dateTime + timedelta( days=sub_date_range ) #increment max_date
+			max_date_str = max_dateTime.strftime( "%Y-%m-%d" )
+			min_date_str = min_dateTime.strftime( "%Y-%m-%d" )
+			
+			print "--Fetching data between %s and %s on %s.%s" % ( min_date_str, max_date_str, read_DSN, table_name )
+			date_query = '''(price_date > \'%s\' AND price_date <= \'%s\')''' % ( min_date_str, max_date_str )
+			if debug: print "\t%s" % date_query
+			dataObj = pull_data( read_DSN, table_name, query, date_query, debug )
+			
+			if dataObj:
+				print "--Writing data out to archive %s.%s" % ( write_DSN, table_name )
+				if debug: print  dataObj[0]
+				write_data ( write_DSN, table_name, dataObj, debug )
+			else:
+				print "***READ and WRITE tables already synchronized***"
 		
-		if dataObj:
-			print "--Writing data out to archive %s.%s" % ( write_DSN, table_name )
-			if debug: print  dataObj[0]
-			write_data ( write_DSN, table_name, dataObj, debug )
-		else:
-			print "***READ and WRITE tables already synchronized***"
-		
+			min_dateTime = min_dateTime + timedelta( days=sub_date_range ) #increment min_date
+			
 		maxDate = nowTime - timedelta ( days=date_range )
 		cleanup_date_str = maxDate.strftime( "%Y-%m-%d" )
 		if clean_up_READ == 1:	#Cleans table archive was written FROM
