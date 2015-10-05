@@ -378,8 +378,8 @@ def main(region):
 
 	convert = psql.read_sql(
 		'''SELECT typeid as itemid, typename as name
-		   FROM invtypes conv
-		   JOIN invgroups grp ON (conv.groupID = grp.groupID)
+		   FROM invTypes conv
+		   JOIN invGroups grp ON (conv.groupID = grp.groupID)
 		   WHERE marketgroupid IS NOT NULL
 		   AND conv.published = 1
 		   AND grp.categoryid NOT IN (9,16,350001,2)

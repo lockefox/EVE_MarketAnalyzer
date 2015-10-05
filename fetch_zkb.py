@@ -155,14 +155,14 @@ def get_crawl_list (method):
 	if method.upper() == 'SHIP':
 		crawl_query = '''
 			SELECT conv.typeid
-			FROM invtypes conv
-			JOIN invgroups grp ON (conv.groupID = grp.groupID)
+			FROM invTypes conv
+			JOIN invGroups grp ON (conv.groupID = grp.groupID)
 			WHERE categoryid = 6'''
 	elif method.upper() == 'GROUP':
 		crawl_query = '''
 			SELECT grp.groupid
-			FROM invtypes conv
-			JOIN invgroups grp ON (conv.groupID = grp.groupID)
+			FROM invTypes conv
+			JOIN invGroups grp ON (conv.groupID = grp.groupID)
 			WHERE categoryid = 6
 			GROUP BY grp.groupid'''
 	else:

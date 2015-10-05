@@ -1,6 +1,6 @@
 SELECT typeid as itemid, typename as name
-FROM invtypes conv
-JOIN invgroups grp ON (conv.groupID = grp.groupID)
+FROM invTypes conv
+JOIN invGroups grp ON (conv.groupID = grp.groupID)
 -- JOIN dgmtypeattributes attr_vals ON (conv.typeID = attr_vals.typeID AND attr_vals.)
 -- JOIN dgmattributetypes attr_names
 WHERE marketgroupid IS NOT NULL
