@@ -48,8 +48,8 @@ def main():
 		os.makedirs('plots/%s' % today)
 		
 	sde_cur.execute('''SELECT typeid,typename
-						FROM invtypes conv
-						JOIN invgroups grp ON (conv.groupID = grp.groupID)
+						FROM invTypes conv
+						JOIN invGroups grp ON (conv.groupID = grp.groupID)
 						WHERE marketgroupid IS NOT NULL
 						AND conv.published = 1''')
 	tmp_convlist = sde_cur.fetchall()
