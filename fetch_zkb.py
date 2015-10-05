@@ -133,7 +133,7 @@ def _validate_connection(
 			print '%s.%s:\tGOOD' % (schema,table_name)
 			return
 		else:
-			table_init = open(path.relpath('sql/%s.mysql' % table_name)).read()
+			table_init = open(path.relpath('SQL/%s.mysql' % table_name)).read()
 			table_init_commands = table_init.split(';')
 			try:
 				for command in table_init_commands:
