@@ -54,6 +54,14 @@
 					"query":"regionID=10000002",
 					"date_range":400,
 					"sub_date_range":50
+				},
+				"snapshot_evecentral": {
+					"table_name":"snapshot_evecentral",
+					"ODBC_DSN":"remote_ec",
+					"create":"snapshot_evecentral.sqlite",
+					"query":"locationID=30000142",
+					"date_range":90,
+					"sub_date_range":15
 				}
 			},
 			"destination_DSN":"sqlite_connector",
