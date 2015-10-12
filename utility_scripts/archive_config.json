@@ -82,7 +82,7 @@
 			},
 			"destination_DSN":"sqlite_connector",
 			"clean_up_READ":0,
-			"clean_up_WRITE":1
+			"clean_up_WRITE":0
 		},
 		"test_ec": {
 			"export_import":"export",
