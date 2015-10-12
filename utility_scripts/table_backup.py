@@ -4,6 +4,7 @@ import pypyodbc
 import ConfigParser
 from datetime import datetime, timedelta
 from os import environ, path, getcwd, chdir
+import smtplib	#for emailing logs 
 thread_exit_flag = False
 
 ### PATH STUFF ###
@@ -13,9 +14,10 @@ config_info = json.load( open(archive_config_path) )
 
 base_path = path.split( path.dirname( path.realpath(__file__) ) )[0]
 
-sql_file_path = path.join( base_path,'SQL' )
-DEV_localpath = path.join( base_path,'init.ini' )
-ALT_localpath = path.join( base_path,'init_local.ini' )
+sql_file_path = path.join( base_path, 'SQL' )
+log_file_path = path.join( base_path, 'logs' )
+DEV_localpath = path.join( base_path, 'init.ini' )
+ALT_localpath = path.join( base_path, 'init_local.ini' )
 conf = ConfigParser.ConfigParser()
 conf.read( [DEV_localpath, ALT_localpath] )
 
@@ -26,12 +28,66 @@ write_mod   = int( conf.get( 'ARCHIVE', 'write_mod' ) )
 gDebug = False
 nowTime = datetime.now()
 
+#### MAIL STUFF ####
+email_source		= str(conf.get('LOGGING', 'email_source'))
+email_recipients	= str(conf.get('LOGGING', 'email_recipients'))
+email_username		= str(conf.get('LOGGING', 'email_username'))
+email_secret		= str(conf.get('LOGGING', 'email_secret'))
+email_server		= str(conf.get('LOGGING', 'email_server'))
+email_port			= str(conf.get('LOGGING', 'email_port'))
+
+#Test to see if all email vars are initialized
+#empty str() = False http://stackoverflow.com/questions/9573244/most-elegant-way-to-check-if-the-string-is-empty-in-python
+bool_email_init = ( bool(email_source.strip()) and\
+					bool(email_recipients.strip()) and\
+					bool(email_username.strip()) and\
+					bool(email_secret.strip()) and\
+					bool(email_server.strip()) and\
+					bool(email_port.strip()) )
+
+def writelog( message, push_email=False):
+	logtime = datetime.utcnow()
+	logtime_str = logtime.strftime('%Y-%m-%d %H:%M:%S')
+	
+	logfile = "%s/table_backup-%s" % (log_file_path, run_arg)
+	log_msg = "%s::%s\n" % (logtime_str, message)
+	#if(compressed_logging):
+	if(False):
+		with gzip.open("%s.gz" % logfile,'a') as myFile:
+			myFile.write(log_msg)
+	else:
+		with open("%s.log" % logfile,'a') as myFile:
+			myFile.write(log_msg)
+	
+	if(push_email and bool_email_init):	#Bad day case
+		#http://stackoverflow.com/questions/10147455/trying-to-send-email-gmail-as-mail-provider-using-python
+		SUBJECT = '''table_backup CRITICAL ERROR - %s''' % run_arg
+		BODY = message
+		
+		EMAIL = '''\From: {email_source}\nTo: {email_recipients}\nSubject: {SUBJECT}\n\n{BODY}'''
+		EMAIL = EMAIL.format(
+			email_source = email_source,
+			email_recipients = email_recipients,
+			SUBJECT = SUBJECT,
+			BODY = BODY
+			)
+		try:
+			mailserver = smtplib.SMTP(email_server,email_port)
+			mailserver.ehlo()
+			mailserver.starttls()
+			mailserver.login(email_username, email_secret)
+			mailserver.sendmail(email_source, email_recipients.split(', '), EMAIL)
+			mailserver.close()
+			writelog( "SENT email with critical failure to %s" % email_recipients, False)
+		except Exception as e:
+			writelog( "FAILED TO SEND EMAIL TO %s ERR: %s " % (email_recipients, e), False)
+			
 def test_connection ( odbc_dsn, table_name, table_create_file, debug=gDebug ):
 	try:
 		db_con = pypyodbc.connect( 'DSN=%s' % odbc_dsn )
 		db_cur = db_con.cursor()
 	except Exception as e:
-		print "***ERROR: unable to connect to DSN=%s: %s" % ( odbc_dsn, e )
+		writelog( "***ERROR: unable to connect to DSN=%s: %s" % ( odbc_dsn, e ), True )
 		sys.exit(2)
 	
 	test_query = '''SELECT * FROM {table_name} LIMIT 1'''
@@ -40,20 +96,20 @@ def test_connection ( odbc_dsn, table_name, table_create_file, debug=gDebug ):
 	try:
 		db_cur.execute( test_query )
 	except Exception as e:
-		print "***ERROR: test_query failed"
+		writelog( "***ERROR: test_query failed" )
 		if table_create_file:
 			try:
-				print "***Trying to CREATE TABLE %s.%s" % ( odbc_dsn, table_name )
+				writelog( "***Trying to CREATE TABLE %s.%s" % ( odbc_dsn, table_name ) )
 				create_table( db_con, db_cur, table_create_file, debug )
 				db_cur.execute( test_query )	#retry test just in case
 			except Exception as err:
-				print "***ERROR: unable to create table %s.%s %s" % ( odbc_dsn, table_name, err)
+				writelog( "***ERROR: unable to create table %s.%s %s" % ( odbc_dsn, table_name, err), True )
 				sys.exit(2)
 		else:
-			print "\tNo table_create_file given, exiting"
+			writelog( "\tNo table_create_file given, exiting", True )
 			sys.exit(2)
 	db_con.close()
-	print "\t%s.%s READY" % ( odbc_dsn, table_name )
+	writelog( "\t%s.%s READY" % ( odbc_dsn, table_name ) )
 
 def create_table ( db_con, db_cur, table_create_file, debug=gDebug ):
 	global sql_file_path
@@ -68,7 +124,7 @@ def create_table ( db_con, db_cur, table_create_file, debug=gDebug ):
 			db_con.commit()
 	except Exception as e:
 		if e[0] == "HY090":
-			print "***Suppressed HY090 ERR: Invalid string or buffer length"
+			writelog( "***Suppressed HY090 ERR: Invalid string or buffer length" )
 			### environment issue.  creates table, but SQLite ODBC connector has a driver issue ###
 			### If table is not created, test read will fail ###
 		else:
@@ -111,21 +167,7 @@ def validate_query ( query, date_str, table_name ):
 			return_str = '''SELECT * FROM %s %s''' % ( table_name, query )
 		else:
 			return_str = '''SELECT * FROM %s WHERE %s''' % ( table_name, query )
-	
-	#if query.upper() == "ALL":
-	#	return_str = '''SELECT * FROM %s''' % ( table_name )
-	#elif date_str:
-	#	if "WHERE" in query.upper():
-	#		return_str = '''SELECT * FROM %s %s AND price_date>\'%s\'''' % ( table_name, query, date_str )
-	#	else:
-	#		return_str = '''SELECT * FROM %s WHERE %s AND price_date>\'%s\'''' % ( table_name, query, date_str )
-	#else: #in case no date_str is given (or otherwise blank/None
-	#	if "WHERE" in query.upper():
-	#		return_str = '''SELECT * FROM %s %s''' % ( table_name, query )
-	#	else:
-	#		return_str = '''SELECT * FROM %s WHERE %s''' % ( table_name, query )
-	
-
+			
 	return return_str
 
 def pull_data ( odbc_dsn, table_name, query, date_str, debug ):
@@ -172,13 +214,12 @@ def write_data ( odbc_dsn, table_name, dataObj, debug ):
 			elif dataType == 'string':
 				data_str = "'%s'" % col
 			else:
-				print "***unsupported dataType: header=%s dataType=%s" % (header, dataType)
+				writelog( "***unsupported dataType: header=%s dataType=%s" % (header, dataType), True )
 			
 			data_values.append(data_str)
 			col_index += 1
 		tmp_value_str = ','.join(data_values)
 		tmp_value_str = tmp_value_str.rstrip(',')
-		#if debug: print tmp_value_str
 		value_str = "%s (%s)," % (value_str, tmp_value_str)
 		
 		if print_single < 1 and debug:
@@ -204,22 +245,6 @@ def write_data ( odbc_dsn, table_name, dataObj, debug ):
 					)
 	writeSQL ( odbc_dsn, commit_str, debug )
 	
-	#duplicate_str = ""
-	#duplicate_str = '''ON DUPLICATE KEY UPDATE '''
-	#for header in table_headers:
-	#	duplicate_str = "%s %s=%s," % (duplicate_str, header, header)
-	#	
-	#duplicate_str = duplicate_str.rstrip(',')
-	#if debug: print duplicate_str
-	#commit_str = '''{write_str} {value_str} {duplicate_str}'''
-	#commit_str = commit_str.format(
-	#				write_str     = write_str,
-	#				value_str     = value_str, 
-	#				duplicate_str = duplicate_str
-	#				)
-	#if debug: print "\twriting data to %s.%s" % ( odbc_dsn, table_name )
-	#writeSQL ( odbc_dsn, commit_str, debug )
-	
 def writeSQL ( odbc_dsn, commit_str, debug ):
 	db_con = pypyodbc.connect( 'DSN=%s' % odbc_dsn )
 	db_cur = db_con.cursor()
@@ -229,7 +254,7 @@ def writeSQL ( odbc_dsn, commit_str, debug ):
 	db_con.close()
 	
 def delete_data ( odbc_dsn, table_name, before_or_after, query, date_str, debug ):
-	print "***Preparing to delete data %s %s in %s.%s***" % ( before_or_after, date_str, odbc_dsn, table_name )
+	writelog( "***Preparing to delete data %s %s in %s.%s***" % ( before_or_after, date_str, odbc_dsn, table_name ) )
 	#time.sleep(erase_delay) #Allow user a moment to escape erase
 	
 	date_test = ""
@@ -238,7 +263,7 @@ def delete_data ( odbc_dsn, table_name, before_or_after, query, date_str, debug 
 	elif before_or_after.lower() == "after":
 		date_test = "price_date>"
 	else:
-		print "***ERROR: Unsupported before_or_after value: %s" % ( before_or_after )
+		writelog( "***ERROR: Unsupported before_or_after value: %s" % ( before_or_after ), True )
 		sys.exit(2)
 		
 	query_str = ""
@@ -288,8 +313,7 @@ def main():
 	try:
 		opts, args = getopt.getopt( sys.argv[1:], 'h:l', ['config=', 'debug'] )
 	except getopt.GetoptError as e:
-		print str(e)
-		print 'unsupported argument'
+		writelog( 'unsupported argument: %s' % str(e), True )
 		sys.exit()
 	for opt, arg in opts:
 		if opt == '--config':
@@ -304,9 +328,9 @@ def main():
 	try:
 		config_info['args'][run_arg]
 	except KeyError as e:
-		print "Invalid config '%s'" % run_arg
+		writelog( "Invalid config '%s'" % run_arg, True )
 		sys.exit(2)
-	print "running profile: %s" % run_arg	
+	writelog( "running profile: %s" % run_arg	)
 	if debug: print "archive_config_path = %s" % archive_config_path
 	if debug: print "sql_file_path = %s" % sql_file_path	
 	if debug: print config_info['args'][run_arg]
@@ -326,7 +350,7 @@ def main():
 	warning_override = False
 	### Run through archive operations ###
 	for table_name,info_dict in config_info['args'][run_arg]['tables_to_run'].iteritems():
-		print "--Preparing to back up: %s" % table_name
+		writelog( "--Preparing to back up: %s" % table_name )
 		ODBC_DSN   = info_dict['ODBC_DSN']
 		create     = info_dict['create']
 		query      = info_dict['query']
@@ -335,8 +359,18 @@ def main():
 			sub_date_range = int( info_dict['sub_date_range'] )
 		except KeyError as e:
 			sub_date_range = date_range
-			
-		print "--Testing Connections"
+		try:
+			warning_override_val = int( info_dict['warning_override'] )
+		except KeyError as e:
+			warning_override_val = -1
+		
+		warning_override = False
+		if warning_override_val == 1:
+			warning_override = True
+		else:
+			warning_override = False
+		
+		writelog( "--Testing Connections" )
 		read_DSN  = ""
 		write_DSN = ""
 		if export_import == 'export':
@@ -346,27 +380,29 @@ def main():
 			read_DSN  = destination_DSN
 			write_DSN = ODBC_DSN
 		else:
-			print "***Unsupported export_import value: %s" % export_import
+			writelog( "***Unsupported export_import value: %s" % export_import, True )
 			sys.exit(2)
 		
-		print "\tREAD = %s.%s" % ( read_DSN, table_name )
+		writelog( "\tREAD = %s.%s" % ( read_DSN, table_name ) )
 		test_connection( read_DSN, table_name,      "", debug )
-		print "\tWRITE = %s.%s" % ( write_DSN, table_name )
+		writelog( "\tWRITE = %s.%s" % ( write_DSN, table_name ) )
 		test_connection( write_DSN, table_name, create, debug )
 		
 		if debug: 
+			print "\tREAD = %s.%s" % ( read_DSN, table_name )
+			print "\tWRITE = %s.%s" %( write_DSN,table_name )
 			user_ack = raw_input( "--CONFIG CORRECT? (y/n)"  )
 			user_ack = user_ack.rstrip('\n')
 			if user_ack.lower() != "y" :	#or warning_override
 				sys.exit(0)
 				
-		print "--Testing %s.%s for existing data" % ( write_DSN, table_name )
+		writelog( "--Testing %s.%s for existing data" % ( write_DSN, table_name ) )
 		date_str = check_table_contents ( write_DSN, table_name, date_range, debug )
 		if query.upper() == "ALL":
 			prev_date_str = date_str
 			maxDate = nowTime - timedelta ( days=date_range )
 			date_str = maxDate.strftime( "%Y-%m-%d" )
-			print "***query=ALL, overriding date: from=%s to=%s" % ( prev_date_str, date_str )
+			writelog( "***query=ALL, overriding date: from=%s to=%s" % ( prev_date_str, date_str ) )
 		
 		date_str_dateTime = datetime.strptime( date_str, "%Y-%m-%d" )
 		total_range = nowTime - date_str_dateTime
@@ -379,30 +415,37 @@ def main():
 			max_date_str = max_dateTime.strftime( "%Y-%m-%d" )
 			min_date_str = min_dateTime.strftime( "%Y-%m-%d" )
 			
-			print "--Fetching data between %s and %s on %s.%s" % ( min_date_str, max_date_str, read_DSN, table_name )
+			writelog( "--Fetching data between %s and %s on %s.%s" % ( min_date_str, max_date_str, read_DSN, table_name ) )
 			date_query = '''(price_date > \'%s\' AND price_date <= \'%s\')''' % ( min_date_str, max_date_str )
 			if debug: print "\t%s" % date_query
 			dataObj = pull_data( read_DSN, table_name, query, date_query, debug )
 			
 			if dataObj:
-				print "--Writing data out to archive %s.%s" % ( write_DSN, table_name )
+				writelog( "--Writing data out to archive %s.%s" % ( write_DSN, table_name ) )
 				if debug: print  dataObj[0]
 				write_data ( write_DSN, table_name, dataObj, debug )
 			else:
-				print "***READ and WRITE tables already synchronized***"
+				writelog( "***READ and WRITE tables already synchronized***" )
 		
 			min_dateTime = min_dateTime + timedelta( days=sub_date_range ) #increment min_date
 			
 		maxDate = nowTime - timedelta ( days=date_range )
 		cleanup_date_str = maxDate.strftime( "%Y-%m-%d" )
 		if clean_up_READ == 1:	#Cleans table archive was written FROM
-			print "***WARNING***Staged to delete archive data!!!"
+			writelog( "***WARNING***Staged to delete archive READ data!!!" )
 			before_or_after = "after"
-			user_ack = "" 
-			#TODO: ADD OVERRIDE FOR AUTOMATED ARCHIVE MANAGEMENT
-			user_ack = raw_input( "--SYSTEM WILL DELETE ARCHIVED DATA: AFTER %s IN %s.%s (y/n)" % ( cleanup_date_str, read_DSN, table_name ) )
-			user_ack = user_ack.rstrip('\n')
-			if user_ack.lower() == "y" :	#or warning_override
+			user_ack = True
+			if warning_override == False:	#if manual mode, ask user for confirmation
+				user_ack = False
+				user_in = raw_input( "--SYSTEM WILL DELETE ARCHIVED DATA: AFTER %s IN %s.%s (y/n)" % ( cleanup_date_str, read_DSN, table_name ) )
+				user_in = user_in.rstrip('\n')
+				if user_in.lower() == "y":
+					user_ack = True
+				else:
+					user_ack = False
+			
+			writelog( "--SYSTEM WILL DELETE ARCHIVED DATA: AFTER %s IN %s.%s" % ( cleanup_date_str, read_DSN, table_name ) )
+			if warning_override and user_ack :
 				if debug: print date_str
 				date_str_dateTime = datetime.strptime( cleanup_date_str, "%Y-%m-%d" )
 				total_range = nowTime - date_str_dateTime
@@ -420,15 +463,23 @@ def main():
 					delete_data ( read_DSN, table_name, before_or_after, query, query_date_str, debug )
 					min_dateTime = min_dateTime + timedelta( days=sub_date_range ) #increment min_date
 			else:
-				print "----user aborted delete operation.  No data affected in %s.%s" % ( read_DSN, table_name )
+				writelog( "----user aborted delete operation.  No data affected in %s.%s" % ( read_DSN, table_name ) )
 		
 		if clean_up_WRITE == 1:	#Cleans table archive was written TO
-			print "***WARNING***Staged to delete archive data!!!"
+			writelog( "***WARNING***Staged to delete archive WRITE data!!!" )
 			before_or_after = "before"
 			#TODO: ADD OVERRIDE FOR AUTOMATED ARCHIVE MANAGEMENT
-			user_ack = raw_input( "--SYSTEM WILL DELETE ARCHIVED DATA: BEFORE %s IN %s.%s (y/n)" % ( cleanup_date_str, write_DSN, table_name ) )
-			user_ack = user_ack.rstrip('\n')
-			if user_ack.lower() == "y" :	#or warning_override
+			user_ack = True
+			if warning_override == False:	#if manual mode, ask user for confirmation
+				user_ack = False
+				user_in = raw_input( "--SYSTEM WILL DELETE ARCHIVED DATA: BEFORE %s IN %s.%s (y/n)" % ( cleanup_date_str, write_DSN, table_name ) )
+				user_in = user_in.rstrip('\n')
+				if user_in.lower() == "y":
+					user_ack = True
+				else:
+					user_ack = False
+			writelog( "--SYSTEM WILL DELETE ARCHIVED DATA: BEFORE %s IN %s.%s" % ( cleanup_date_str, write_DSN, table_name ) )
+			if warning_override and user_ack :
 				min_date_str = get_min_date ( write_DSN, table_name, query, debug )
 				
 				min_dateTime = datetime.strptime( min_date_str, "%Y-%m-%d" )
@@ -443,7 +494,7 @@ def main():
 					delete_data ( write_DSN, table_name, before_or_after, query, query_date_str, debug )
 					max_dateTime = max_dateTime - timedelta( days=sub_date_range ) #increment min_date
 			else:
-				print "----user aborted delete operation.  No data affected in %s.%s" % ( write_DSN, table_name )
+				writelog( "----user aborted delete operation.  No data affected in %s.%s" % ( write_DSN, table_name ) )
 		
 		
 if __name__ == "__main__":
