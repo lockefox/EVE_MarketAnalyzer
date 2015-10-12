@@ -230,7 +230,7 @@ def writeSQL ( odbc_dsn, commit_str, debug ):
 	
 def delete_data ( odbc_dsn, table_name, before_or_after, query, date_str, debug ):
 	print "***Preparing to delete data %s %s in %s.%s***" % ( before_or_after, date_str, odbc_dsn, table_name )
-	time.sleep(erase_delay) #Allow user a moment to escape erase
+	#time.sleep(erase_delay) #Allow user a moment to escape erase
 	
 	date_test = ""
 	if   before_or_after.lower() == "before":
@@ -260,6 +260,26 @@ def delete_data ( odbc_dsn, table_name, before_or_after, query, date_str, debug 
 	if debug: print "\t%s" % query_str
 	
 	writeSQL( odbc_dsn, query_str, debug ) 
+
+def get_min_date ( odbc_dsn, table_name, query, debug ):
+	query_str = '''SELECT MIN(price_date) FROM {table_name}'''
+	query_str = query_str.format(
+					table_name = table_name 
+				)
+				
+	if query:
+		query_str = '''%s WHERE %s''' % ( query_str, query )
+	
+	if debug: print query_str
+	db_con = pypyodbc.connect( 'DSN=%s' % odbc_dsn )
+	db_cur = db_con.cursor()
+	
+	db_cur.execute(query_str)
+	
+	table_data = db_cur.fetchall()
+	
+	db_con.close()
+	return table_data[0][0]
 	
 def main():
 	global run_arg
@@ -383,7 +403,22 @@ def main():
 			user_ack = raw_input( "--SYSTEM WILL DELETE ARCHIVED DATA: AFTER %s IN %s.%s (y/n)" % ( cleanup_date_str, read_DSN, table_name ) )
 			user_ack = user_ack.rstrip('\n')
 			if user_ack.lower() == "y" :	#or warning_override
-				delete_data ( read_DSN, table_name, before_or_after, query, cleanup_date_str, debug )
+				if debug: print date_str
+				date_str_dateTime = datetime.strptime( cleanup_date_str, "%Y-%m-%d" )
+				total_range = nowTime - date_str_dateTime
+		
+				date_query = ""
+				max_dateTime = nowTime
+				step_dateTime = date_str_dateTime
+				min_dateTime = date_str_dateTime
+				while step_dateTime < max_dateTime:	#run forward
+					step_dateTime = step_dateTime + timedelta( days=sub_date_range ) #increment max_date
+					max_date_str  = step_dateTime.strftime( "%Y-%m-%d" )
+					min_date_str  = min_dateTime.strftime( "%Y-%m-%d" )
+					query_date_str = '''(price_date > \'%s\' AND price_date <= \'%s\')''' % ( min_date_str, max_date_str )
+					if debug: print query_date_str
+					delete_data ( read_DSN, table_name, before_or_after, query, query_date_str, debug )
+					min_dateTime = min_dateTime + timedelta( days=sub_date_range ) #increment min_date
 			else:
 				print "----user aborted delete operation.  No data affected in %s.%s" % ( read_DSN, table_name )
 		
@@ -394,9 +429,21 @@ def main():
 			user_ack = raw_input( "--SYSTEM WILL DELETE ARCHIVED DATA: BEFORE %s IN %s.%s (y/n)" % ( cleanup_date_str, write_DSN, table_name ) )
 			user_ack = user_ack.rstrip('\n')
 			if user_ack.lower() == "y" :	#or warning_override
-				delete_data ( write_DSN, table_name, before_or_after, query, cleanup_date_str, debug )
+				min_date_str = get_min_date ( write_DSN, table_name, query, debug )
+				
+				min_dateTime = datetime.strptime( min_date_str, "%Y-%m-%d" )
+				max_dateTime = datetime.strptime( cleanup_date_str, "%Y-%m-%d" )
+				step_dateTime = max_dateTime
+				while step_dateTime > min_dateTime:		#run backward
+					step_dateTime = step_dateTime - timedelta( days=sub_date_range ) #increment max_date
+					max_date_str = max_dateTime.strftime( "%Y-%m-%d" )
+					min_date_str = step_dateTime.strftime( "%Y-%m-%d" )
+					query_date_str = '''(price_date >= \'%s\' AND price_date < \'%s\')''' % ( min_date_str, max_date_str )
+					if debug: print query_date_str
+					delete_data ( write_DSN, table_name, before_or_after, query, query_date_str, debug )
+					max_dateTime = max_dateTime - timedelta( days=sub_date_range ) #increment min_date
 			else:
-				print "----user aborted delete operation.  No data affected in %s.%s" % ( read_DSN, table_name )
+				print "----user aborted delete operation.  No data affected in %s.%s" % ( write_DSN, table_name )
 		
 		
 if __name__ == "__main__":

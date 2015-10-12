@@ -1,5 +1,21 @@
 {
 	"args": {
+		"delete_test": {
+			"export_import":"import",
+			"tables_to_run": {
+				"snapshot_evecentral_alt": {
+					"table_name":"snapshot_evecentral_alt",
+					"ODBC_DSN":"sqlite_connector2",
+					"create":"snapshot_evecentral.sqlite",
+					"query":"locationID=30000142",
+					"date_range":90,
+					"sub_date_range":5
+				}
+			},
+			"destination_DSN":"sqlite_connector",
+			"clean_up_READ":1,
+			"clean_up_WRITE":1
+		},
 		"export_1": {
 			"export_import":"export",
 			"tables_to_run": {
@@ -154,6 +170,30 @@
 			}
 		},
 		"snapshot_evecentral": {
+			"cols": [
+				"price_date",	
+				"price_time",	
+				"typeid",		
+				"locationid",	
+				"location_type",
+				"buy_sell",		
+				"price_best",	
+				"price_avg",		
+				"order_volume"
+			],
+			"types": {
+				"price_date":"string",
+				"price_time":"string",
+				"typeid":"number",
+				"locationid":"number",
+				"location_type":"string",
+				"buy_sell":"number",
+				"price_best":"number",
+				"price_avg":"number",
+				"order_volume":"number"
+			}
+		},
+		"snapshot_evecentral_alt": {
 			"cols": [
 				"price_date",	
 				"price_time",	
