@@ -1,0 +1,221 @@
+{
+	"args": {
+		"delete_test": {
+			"export_import":"import",
+			"tables_to_run": {
+				"snapshot_evecentral_alt": {
+					"table_name":"snapshot_evecentral_alt",
+					"ODBC_DSN":"sqlite_connector2",
+					"create":"snapshot_evecentral.sqlite",
+					"query":"locationID=30000142",
+					"date_range":90,
+					"sub_date_range":5
+				}
+			},
+			"destination_DSN":"sqlite_connector",
+			"clean_up_READ":1,
+			"clean_up_WRITE":1
+		},
+		"export_1": {
+			"export_import":"export",
+			"tables_to_run": {
+				"crest_markethistory": {
+					"table_name":"crest_markethistory",
+					"ODBC_DSN":"evemarketdata",
+					"create":"crest_markethistory.sqlite",
+					"query":"regionID=10000002",
+					"date_range":400
+				},
+				"snapshot_evecentral": {
+					"table_name":"snapshot_evecentral",
+					"ODBC_DSN":"remote_ec",
+					"create":"snapshot_evecentral.sqlite",
+					"query":"locationID=30000142",
+					"date_range":90
+				}
+			},
+			"destination_DSN":"sqlite_connector",
+			"clean_up_READ":0,
+			"clean_up_WRITE":0
+		},
+		"import_1": {
+			"export_import":"import",
+			"tables_to_run": {
+				"crest_markethistory": {
+					"table_name":"crest_markethistory",
+					"ODBC_DSN":"sqlite_connector",
+					"create":"crest_markethistory.mysql",
+					"query":"regionID=10000002",
+					"date_range":400
+				},
+				"snapshot_evecentral": {
+					"table_name":"snapshot_evecentral",
+					"ODBC_DSN":"sqlite_connector",
+					"create":"snapshot_evecentral.mysql",
+					"query":"locationID=30000142",
+					"date_range":90
+				}
+			},
+			"destination_DSN":"eve_data",
+			"clean_up_READ":0,
+			"clean_up_WRITE":0
+		},
+		"test": {
+			"export_import":"export",
+			"tables_to_run": {
+				"crest_markethistory": {
+					"table_name":"crest_markethistory",
+					"ODBC_DSN":"evemarketdata",
+					"create":"crest_markethistory.sqlite",
+					"query":"regionID=10000002",
+					"date_range":400,
+					"sub_date_range":50
+				},
+				"snapshot_evecentral": {
+					"table_name":"snapshot_evecentral",
+					"ODBC_DSN":"remote_ec",
+					"create":"snapshot_evecentral.sqlite",
+					"query":"locationID=30000142",
+					"date_range":90,
+					"sub_date_range":15
+				}
+			},
+			"destination_DSN":"sqlite_connector",
+			"clean_up_READ":0,
+			"clean_up_WRITE":1
+		},
+		"test_ec": {
+			"export_import":"export",
+			"tables_to_run": {
+				"snapshot_evecentral": {
+					"table_name":"snapshot_evecentral",
+					"ODBC_DSN":"evemarketdata",
+					"create":"snapshot_evecentral.sqlite",
+					"query":"locationID=30000142",
+					"date_range":90,
+					"sub_date_range":15
+				}
+			},
+			"destination_DSN":"sqlite_connector",
+			"clean_up_READ":1,
+			"clean_up_WRITE":0
+		},
+		"test_export": {
+			"export_import":"import",
+			"tables_to_run": {
+				"crest_markethistory": {
+					"table_name":"crest_markethistory",
+					"ODBC_DSN":"evemarketdata",
+					"create":"crest_markethistory.mysql",
+					"query":"regionID=10000002",
+					"date_range":400
+				},
+				"snapshot_evecentral": {
+					"table_name":"snapshot_evecentral",
+					"ODBC_DSN":"evemarketdata",
+					"create":"snapshot_evecentral.mysql",
+					"query":"locationID=30000142 AND typeid IN (29668,34133,34132,34,35,36,37,38,39,40,11399,16670,16671,16672,16673,16678,16679,16680,16681,16682,16683,17317,33359,33360,33361,33362,11176,11178,11184,11186,11196,11198,11200,11202,34317,34562,34828,35683,34593,34595,20171,20172,20410,20411,20412,20413,20414,20415,20416,20417,20418,20419,20420,20421,20423,20424,25887,11377,12032,12034,12038,11993,11999,12003,12005,33151,33153,33155,33157,16227,16229,16231,16233,24696,24698,24700,24702)",
+					"date_range":90
+				}
+			},
+			"destination_DSN":"sqlite_connector",
+			"clean_up_READ":1,
+			"clean_up_WRITE":0
+		},
+		"test1": {
+			"export_import":"export",
+			"tables_to_run": {
+				"crest_markethistory": {
+					"table_name":"crest_markethistory",
+					"ODBC_DSN":"evemarketdata",
+					"create":"crest_markethistory.sqlite",
+					"query":"regionID=10000002",
+					"date_range":400
+				},
+				"snapshot_evecentral": {
+					"table_name":"snapshot_evecentral",
+					"ODBC_DSN":"remote_ec",
+					"create":"snapshot_evecentral.sqlite",
+					"query":"locationID=30000142",
+					"date_range":90,
+					"sub_date_range":15
+				}
+			},
+			"destination_DSN":"sqlite_connector",
+			"clean_up_READ":0,
+			"clean_up_WRITE":0
+		}
+	},
+	"tables": {
+		"crest_markethistory": {
+			"cols": [
+				"price_date",
+			    "itemid",
+			    "regionid",
+			    "orders",
+			    "volume",
+			    "lowPrice",
+			    "highPrice",
+			    "avgPrice"
+			],
+			"types": {
+				"price_date":"string",
+				"itemid":"number",
+				"regionid":"number",
+				"orders":"number",
+				"volume":"number",
+				"lowPrice":"number",
+				"highPrice":"number",
+				"avgPrice":"number"
+			}
+		},
+		"snapshot_evecentral": {
+			"cols": [
+				"price_date",	
+				"price_time",	
+				"typeid",		
+				"locationid",	
+				"location_type",
+				"buy_sell",		
+				"price_best",	
+				"price_avg",		
+				"order_volume"
+			],
+			"types": {
+				"price_date":"string",
+				"price_time":"string",
+				"typeid":"number",
+				"locationid":"number",
+				"location_type":"string",
+				"buy_sell":"number",
+				"price_best":"number",
+				"price_avg":"number",
+				"order_volume":"number"
+			}
+		},
+		"snapshot_evecentral_alt": {
+			"cols": [
+				"price_date",	
+				"price_time",	
+				"typeid",		
+				"locationid",	
+				"location_type",
+				"buy_sell",		
+				"price_best",	
+				"price_avg",		
+				"order_volume"
+			],
+			"types": {
+				"price_date":"string",
+				"price_time":"string",
+				"typeid":"number",
+				"locationid":"number",
+				"location_type":"string",
+				"buy_sell":"number",
+				"price_best":"number",
+				"price_avg":"number",
+				"order_volume":"number"
+			}
+		}
+	}
+}
