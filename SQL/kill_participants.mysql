@@ -5,6 +5,7 @@ CREATE TABLE `kill_participants` (
 	`kill_time` datetime NOT NULL,
 	`isVictim` tinyint(1) NOT NULL,
 	`shipTypeID` int(8) NOT NULL,
+	`weaponType` int(8) DEFAULT NULL,
 	`damage` int(8) NOT NULL,
 	`characterID` int(16) NOT NULL,
 	-- `characterName` tinytext NOT NULL,
