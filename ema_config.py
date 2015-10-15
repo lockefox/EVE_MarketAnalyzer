@@ -51,6 +51,8 @@ def connect_local_databases(*args):
 crest_pricehistory  = conf.get('TABLES','crest_pricehistory')
 crest_industryindex = conf.get('TABLES','crest_industryindex')
 crest_serverprices  = conf.get('TABLES','crest_serverprices')
+ema_reprocess  = conf.get('TABLES','ema_reprocess')
+ema_build  = conf.get('TABLES','ema_build')
 
 def sanitize(filename):
 	def keep(c):
