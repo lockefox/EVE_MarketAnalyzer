@@ -1,0 +1,11 @@
+DROP TABLE IF EXISTS `ema_build`;
+CREATE TABLE `ema_build` (
+	`value_date`	     DATE NOT NULL,
+	`itemid`	     INT(8) NOT NULL,
+	`regionid`           INT(8) NOT NULL,
+	`avgValue`	     FLOAT(13,2) NULL,
+	PRIMARY KEY (value_date, itemid,regionid))
+ENGINE=InnoDB DEFAULT CHARSET=latin1;
+CREATE INDEX build_dates ON ema_process(value_date);
+CREATE INDEX build_itemids ON ema_process(itemid);
+CREATE INDEX build_regionids ON ema_process(regionid);
