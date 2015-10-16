@@ -50,7 +50,7 @@ def _reprocess():
         refinables_query = '''insert into ema_reprocess(select price_date,t.typeID,p.regionid,IF(categoryid=25,0.7236,0.55)*SUM(quantity*avgPrice/portionsize) from
         %.invTypes t,%.invGroups g,%.invTypeMaterials m,crest_markethistory as p
         where t.groupid=g.groupid and t.typeid=m.typeid and m.materialtypeid=p.itemid 
-        and price_date>(select  CASE WHEN max(value_date)=NULL THEN 0 ELSE max(value_date) END from ema_reprocess) 
+        and price_date>(select  CASE WHEN max(value_date) IS NULL THEN 0 ELSE max(value_date) END from ema_reprocess) 
         group by price_date,t.typeid,p.regionid 
         having count(*)=(select count(*) from %.invTypeMaterials where typeid=t.typeid))'''
 
@@ -69,7 +69,7 @@ def _build():
         material_cost_query = '''insert into ema_build(select price_date,t.typeid,p.regionid,SUM(CEILING(ROUND(0.9*m.quantity,2))*avgprice/pr.quantity)
         from %.invTypes t, %.industryActivityProducts pr, %.industryActivityMaterials m, crest_markethistory p
         where t.typeid=pr.producttypeid and pr.typeid=m.typeid and m.materialtypeid=p.itemid and pr.activityid=1 and m.activityid=1
-        and price_date>(select CASE WHEN max(value_date)=NULL THEN 0 ELSE max(value_date) END from ema_build)
+        and price_date>(select CASE WHEN max(value_date) IS NULL THEN 0 ELSE max(value_date) END from ema_build)
         group by price_date,t.typeid,p.regionid 
         having count(*)=(select count(*) from %.industryActivityProducts pra, %.industryActivityMaterials ma
         where ma.typeid=pra.typeid and pra.producttypeid=t.typeid and pra.activityid=1 and ma.activityid=1))'''
