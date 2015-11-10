@@ -403,8 +403,8 @@ def main():
 			maxDate = nowTime - timedelta ( days=date_range )
 			date_str = maxDate.strftime( "%Y-%m-%d" )
 			writelog( "***query=ALL, overriding date: from=%s to=%s" % ( prev_date_str, date_str ) )
-		
-		date_str_dateTime = datetime.strptime( date_str, "%Y-%m-%d" )
+		if debug: print date_str
+		date_str_dateTime = datetime.strptime( str(date_str), "%Y-%m-%d" )
 		total_range = nowTime - date_str_dateTime
 
 		date_query = ""

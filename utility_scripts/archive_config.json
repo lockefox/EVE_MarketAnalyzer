@@ -60,6 +60,29 @@
 			"clean_up_READ":0,
 			"clean_up_WRITE":0
 		},
+		"anya_import":{
+			"export_import":"export",
+			"tables_to_run": {
+				"crest_markethistory": {
+					"table_name":"crest_markethistory",
+					"ODBC_DSN":"sqlite_connector",
+					"create":"crest_markethistory.mysql",
+					"query":"regionID=10000002",
+					"date_range":400
+				},
+				"snapshot_evecentral": {
+					"table_name":"snapshot_evecentral",
+					"ODBC_DSN":"sqlite_connector2",
+					"create":"snapshot_evecentral.mysql",
+					"query":"locationID IN (30000142,30002659,30002187)",
+					"date_range":30,
+					"sub_date_range":4
+				}
+			},
+			"destination_DSN":"evemarketdata",
+			"clean_up_READ":0,
+			"clean_up_WRITE":0
+		},
 		"test": {
 			"export_import":"export",
 			"tables_to_run": {
