@@ -305,6 +305,9 @@ def get_min_date ( odbc_dsn, table_name, query, debug ):
 	
 	db_con.close()
 	return table_data[0][0]
+
+def clean_up_table ( odbc_dsn, table_name, date_str, sub_date_range, before_or_after, debug=False ):
+	None
 	
 def main():
 	global run_arg
