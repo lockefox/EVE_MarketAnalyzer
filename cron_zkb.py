@@ -70,7 +70,6 @@ def writelog(pid, message, push_email=False):
 			writelog(pid, "SENT email with critical failure to %s" % email_recipients, False)
 		except:
 			writelog(pid, "FAILED TO SEND EMAIL TO %s" % email_recipients, False)
-
 			
 def _initSQL(table_name, pid=script_pid):
 	#global db_con, db_cur
