@@ -18,7 +18,9 @@ db_cur = None
 
 ##### GLOBAL VARS #####
 script_pid = ""
-snapshot_table = ""
+tableName_participants	= conf.get('TABLES', 'zkb_participants')
+tableName_fits        	= conf.get('TABLES', 'zkb_fits')
+logfile_name	          = conf.get('CRON', 'zkb_logfile') #add locationID to logfile name
 
 
 def writelog(pid, message, push_email=False):
