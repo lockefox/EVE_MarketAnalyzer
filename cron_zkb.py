@@ -13,15 +13,27 @@ import smtplib	#for emailing logs
 from ema_config import *
 thread_exit_flag = False
 
-db_con = None
-db_cur = None
+db_partcipants = None
+db_fits = None
+#db_con = None
+#db_cur = None
 
 ##### GLOBAL VARS #####
 script_pid = ""
 tableName_participants	= conf.get('TABLES', 'zkb_participants')
 tableName_fits        	= conf.get('TABLES', 'zkb_fits')
-logfile_name	          = conf.get('CRON', 'zkb_logfile') #add locationID to logfile name
+compressed_logging = int(conf.get('CRON', 'compressed_logging'))
+script_dir_path = "%s/logs/" % os.path.dirname(os.path.realpath(__file__))
+if not os.path.exists(script_dir_path):
+	os.makedirs(script_dir_path)
 
+class DB_handle (object):
+	def __init__ (self, db_con, db_cur, table_name):
+		self.db_con = db_con
+		self.db_cur = db_cur
+		self.table_name = table_name
+	def __str__ (self):
+		return self.table_name
 
 def writelog(pid, message, push_email=False):
 	logtime = datetime.utcnow()
@@ -61,7 +73,7 @@ def writelog(pid, message, push_email=False):
 
 			
 def _initSQL(table_name, pid=script_pid):
-	global db_con, db_cur
+	#global db_con, db_cur
 	
 	db_con = MySQLdb.connect(
 		host   = db_host,
@@ -94,6 +106,8 @@ def _initSQL(table_name, pid=script_pid):
 	
 	global table_header
 	table_header = ','.join(tmp_headers)
+	db_obj = DB_handle(db_con, db_cur, table_name)	#put db parts in a class for better portability
+	return db_obj
 	
 def main():
 	global snapshot_table
@@ -117,6 +131,12 @@ def main():
 			writelog(pid, "write table changed to: `%s`" % snapshot_table)
 		else:
 			assert False
+	
+	global db_partcipants
+	db_partcipants = _initSQL(tableName_participants, script_pid)
+	
+	global db_fits
+	db_fits = _initSQL(tableName_fits, script_pid)
 	
 if __name__ == "__main__":
 	try:
