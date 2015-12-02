@@ -109,11 +109,9 @@ def _initSQL(table_name, pid=script_pid):
 	return db_obj
 	
 def main():
-	global snapshot_table
 	table_cleanup = False
 	global script_pid
 	script_pid = str(os.getpid())
-	print(script_pid)
 	
 	try:
 		opts, args = getopt.getopt(sys.argv[1:],'h:l', ['cleanup','table_override='])
@@ -125,9 +123,6 @@ def main():
 		if opt == '--optimize_table':
 			table_cleanup = True
 			writelog(pid, "Executing table cleanup" % snapshot_table)
-		elif opt == '--table_override':
-			snapshot_table = arg
-			writelog(pid, "write table changed to: `%s`" % snapshot_table)
 		else:
 			assert False
 	
@@ -137,6 +132,8 @@ def main():
 	global db_fits
 	db_fits = _initSQL(tableName_fits, script_pid)
 	
+	#db_partcipants.db_cur.execute('''SHOW COLUMNS FROM `%s`''' % tableName_participants)
+	#print db_partcipants.db_cur.fetchall()
 if __name__ == "__main__":
 	try:
 		main()
