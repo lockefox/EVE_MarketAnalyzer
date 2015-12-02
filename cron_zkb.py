@@ -22,12 +22,16 @@ db_fits = None
 script_pid = ""
 tableName_participants	= conf.get('TABLES', 'zkb_participants')
 tableName_fits        	= conf.get('TABLES', 'zkb_fits')
+tableName_losses       	= conf.get('TABLES', 'zkb_trunc_stats')
+
 compressed_logging = int(conf.get('CRON', 'compressed_logging'))
 script_dir_path = "%s/logs/" % os.path.dirname(os.path.realpath(__file__))
 if not os.path.exists(script_dir_path):
 	os.makedirs(script_dir_path)
 
 class DB_handle (object):
+	#Designed to hold SQL connection info
+	#Though, most tables should be on same schema?
 	def __init__ (self, db_con, db_cur, table_name):
 		self.db_con = db_con
 		self.db_cur = db_cur
@@ -127,10 +131,11 @@ def main():
 			assert False
 	
 	global db_partcipants
-	db_partcipants = _initSQL(tableName_participants, script_pid)
-	
+	db_partcipants = _initSQL(tableName_participants, script_pid)	
 	global db_fits
 	db_fits = _initSQL(tableName_fits, script_pid)
+	global db_losses
+	db_losses = _initSQL(tableName_losses, script_pid)
 	
 	#db_partcipants.db_cur.execute('''SHOW COLUMNS FROM `%s`''' % tableName_participants)
 	#print db_partcipants.db_cur.fetchall()
