@@ -1,4 +1,4 @@
-import sys, gzip, StringIO, sys, math, os, getopt, time, json, socket
+import sys, gzip, StringIO, sys, math, os, getopt, time, json, socket, platform
 #from os import path, environ, getcwd
 import urllib2
 import httplib
@@ -20,9 +20,11 @@ db_fits = None
 
 ##### GLOBAL VARS #####
 script_pid = ""
+debug = False
 tableName_participants	= conf.get('TABLES', 'zkb_participants')
 tableName_fits        	= conf.get('TABLES', 'zkb_fits')
 tableName_losses       	= conf.get('TABLES', 'zkb_trunc_stats')
+scriptName = "cron_zkb" #used for PID locking
 
 compressed_logging = int(conf.get('CRON', 'compressed_logging'))
 script_dir_path = "%s/logs/" % os.path.dirname(os.path.realpath(__file__))
@@ -74,7 +76,18 @@ def writelog(pid, message, push_email=False):
 			writelog(pid, "SENT email with critical failure to %s" % email_recipients, False)
 		except:
 			writelog(pid, "FAILED TO SEND EMAIL TO %s" % email_recipients, False)
-			
+
+def get_lock(process_name):
+    global lock_socket   # Without this our lock gets garbage collected
+    lock_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    try:
+        lock_socket.bind('\0' + process_name)
+        print 'I got the lock'
+    except socket.error:
+        print 'lock exists'
+        sys.exit()
+
+				
 def _initSQL(table_name, pid=script_pid):
 	#global db_con, db_cur
 	
@@ -114,22 +127,32 @@ def _initSQL(table_name, pid=script_pid):
 	
 def main():
 	table_cleanup = False
-	global script_pid
+	global script_pid, debug
 	script_pid = str(os.getpid())
 	
+#### Get CLI options ####
 	try:
-		opts, args = getopt.getopt(sys.argv[1:],'h:l', ['cleanup','table_override='])
+		opts, args = getopt.getopt(sys.argv[1:],'h:l', ['cleanup','debug'])
 	except getopt.GetoptError as e:
 		print str(e)
 		print 'unsupported argument'
 		sys.exit()
 	for opt, arg in opts:
-		if opt == '--optimize_table':
+		if opt == '--cleanup':
 			table_cleanup = True
 			writelog(pid, "Executing table cleanup" % snapshot_table)
+		elif opt == "--debug":
+			debug = True
 		else:
 			assert False
-	
+#### Figure out if program is already running ####
+	if platform.system() == "Windows":
+		print "PID Locking not supported on windows"
+		if debug: print "--DEBUG MODE-- Overriding PID lock"
+		else: sys.exit(0)
+	else:
+		get_lock(scriptName) 
+#### Set up db connections for query/write ####
 	global db_partcipants
 	db_partcipants = _initSQL(tableName_participants, script_pid)	
 	global db_fits
@@ -139,6 +162,12 @@ def main():
 	
 	#db_partcipants.db_cur.execute('''SHOW COLUMNS FROM `%s`''' % tableName_participants)
 	#print db_partcipants.db_cur.fetchall()
+	
+#### Fetch zkb redisq data ####
+	package_null = False
+	while (not package_null):
+		None
+	
 if __name__ == "__main__":
 	try:
 		main()
