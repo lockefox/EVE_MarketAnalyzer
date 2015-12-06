@@ -224,6 +224,21 @@ def test_killInfo (kill_obj, pid=script_pid, debug=False):
 	
 	writelog(pid, "PASS: critical key check passed.  killID=%s" % killID)
 
+def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
+	None
+	
+def process_fits(kill_data, dbObj, pid=script_pid, debug=False):
+	None
+	
+def process_losses(kill_data, dbObj, pid=script_pid, debug=False):
+	None
+	
+def process_locations(kill_data, dbObj, pid=script_pid, debug=False):
+	None
+	
+def process_crestInfo(kill_data, dbObj, pid=script_pid, debug=False):
+	None
+	
 def main():
 	table_cleanup = False
 	global script_pid, debug
@@ -283,7 +298,11 @@ def main():
 		except Exception as e:
 			caught_exception = e
 		
-		process_participants(kill_data, script_pid, debug)
+		process_participants(kill_data, db_partcipants, script_pid, debug)
+		process_fits(kill_data, db_fits, script_pid, debug)
+		process_losses(kill_data, db_losses, script_pid, debug)
+		process_locations(kill_data, db_locations, script_pid, debug)
+		process_crestInfo(kill_data, db_crestInfo, script_pid, debug)
 		
 		if caught_exception:	#check to see if parsing should end
 			if kills_processed == 0:
