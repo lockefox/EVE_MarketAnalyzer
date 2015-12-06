@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS `kill_location`;
+CREATE TABLE `kill_location`(
+	`killID` int(32) NOT NULL,
+	`locationID` int(8) DEFAULT NULL,
+	`x` decimal(16,4) DEFAULT NULL,
+  `y` decimal(16,4) DEFAULT NULL,
+  `z` decimal(16,4) DEFAULT NULL,
+	PRIMARY KEY (killID))
+ENGINE=InnoDB DEFAULT CHARSET=latin1

@@ -19,9 +19,6 @@ CREATE TABLE `kill_participants` (
 	`weaponTypeID` int(8) DEFAULT NULL,
 	-- `points` int(8) DEFAULT NULL,
 	`totalValue` decimal(16,2) DEFAULT NULL,
-  `closestCelestial` int(8) DEFAULT NULL,
-  `x` decimal(16,4) DEFAULT NULL,
-  `y` decimal(16,4) DEFAULT NULL,
-  `z` decimal(16,4) DEFAULT NULL,
+  `locationID` int(8) DEFAULT NULL,
 	PRIMARY KEY(killID,characterID))
 ENGINE=InnoDB DEFAULT CHARSET=latin1

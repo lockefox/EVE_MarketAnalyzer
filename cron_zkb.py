@@ -13,11 +13,11 @@ import smtplib	#for emailing logs
 from ema_config import *
 thread_exit_flag = False
 
-db_partcipants = None
-db_fits = None
-db_crestInfo = None
-db_losses = None
-
+db_partcipants	= None
+db_fits					= None
+db_crestInfo		= None
+db_losses				= None
+db_locations		= None
 
 ##### GLOBAL VARS #####
 script_pid = ""
@@ -26,6 +26,7 @@ tableName_participants	= conf.get('TABLES', 'zkb_participants')
 tableName_fits        	= conf.get('TABLES', 'zkb_fits')
 tableName_losses       	= conf.get('TABLES', 'zkb_trunc_stats')
 tableName_crestInfo			= conf.get('TABLES', 'zkb_crest_info')
+tableName_location			= conf.get('TABLES', 'zkb_location')
 scriptName = "cron_zkb" #used for PID locking
 
 compressed_logging	= int(conf.get('CRON', 'compressed_logging'))
@@ -111,7 +112,7 @@ def get_lock(process_name):
 	except socket.error:
 		writelog(pid, "PID already locked.  Quitting")
 		sys.exit()
-	
+
 def _initSQL(table_name, pid=script_pid):
 	#global db_con, db_cur
 	try:
@@ -206,13 +207,21 @@ def fetch_data(pid, debug=False):
 def save_killInfo (kill_obj, debug=False):
 	#if debug: print "save_killInfo()"
 	kill_info = kill_obj['package']
-	try:
-		killID = kill_info['killID']
+	try:	#check that the critical pieces of any kill are in tact
+		killID		= kill_info['killID']
+		hash 			= kill_info['zkb']['hash']
+		killTime	= kill_info['killTime']
 	except KeyError as e:
 		raise e #let main handle final crash/retry logic 
-	if debug: print killID
+	if debug: print "%s @ %s" % (killID, killTime)
 		
+	try:
+		killTime_datetime = datetime.strptime(killTime, "%Y.%m.%d %H:%M:%S") #2015.12.06 02:12:30
+	except ValueError as e:
+		raise e #let main handle final crash/retry logic 
 		
+	
+
 def main():
 	table_cleanup = False
 	global script_pid, debug
@@ -251,6 +260,8 @@ def main():
 	db_losses = _initSQL(tableName_losses, script_pid)
 	global db_crestInfo
 	db_crestInfo = _initSQL(tableName_crestInfo, script_pid)
+	global db_locations
+	db_locations = _initSQL(tableName_location, script_pid)
 	#db_partcipants.db_cur.execute('''SHOW COLUMNS FROM `%s`''' % tableName_participants)
 	#print db_partcipants.db_cur.fetchall()
 	
