@@ -204,23 +204,25 @@ def fetch_data(pid, debug=False):
 	##	sys.exit(0)
 	return request.json()
 
-def save_killInfo (kill_obj, debug=False):
+def test_killInfo (kill_obj, pid=script_pid, debug=False):
 	#if debug: print "save_killInfo()"
 	kill_info = kill_obj['package']
 	try:	#check that the critical pieces of any kill are in tact
 		killID		= kill_info['killID']
 		hash 			= kill_info['zkb']['hash']
-		killTime	= kill_info['killTime']
+		killTime	= kill_info['killmail']['killTime']
 	except KeyError as e:
 		raise e #let main handle final crash/retry logic 
+		writelog(pid, "ERROR: critical key check failed: %s" % e)
 	if debug: print "%s @ %s" % (killID, killTime)
 		
 	try:
 		killTime_datetime = datetime.strptime(killTime, "%Y.%m.%d %H:%M:%S") #2015.12.06 02:12:30
 	except ValueError as e:
 		raise e #let main handle final crash/retry logic 
-		
+		writelog(pid, "ERROR: unable to convert `killTime`:%s %s" % (killTime, e))		
 	
+	writelog(pid, "PASS: critical key check passed.  killID=%s" % killID)
 
 def main():
 	table_cleanup = False
@@ -277,10 +279,12 @@ def main():
 			caught_exception = e
 			
 		try:
-			save_killInfo(kill_data, debug)
+			test_killInfo(kill_data, script_pid, debug)
 		except Exception as e:
 			caught_exception = e
-			
+		
+		process_participants(kill_data, script_pid, debug)
+		
 		if caught_exception:	#check to see if parsing should end
 			if kills_processed == 0:
 				if fail_count >= zkb_exception_limit:
@@ -295,12 +299,12 @@ def main():
 						)
 					writelog(script_pid, error_msg, True)
 					
-				writelog(script_pid, "EXCEPTION FOUND: but kills_processed = %s, retry case" % kills_processed)
+				writelog(script_pid, "EXCEPTION FOUND: but kills_processed = %s, retry case: %s" % (kills_processed,caught_exception))
 				#kills_processed += 1
 				fail_count += 1 
 				continue
 			elif kills_processed > 0:
-				writelog(script_pid, "EXCEPTION FOUND: kills_processed = %s, sleep case" % kills_processed)
+				writelog(script_pid, "EXCEPTION FOUND: kills_processed = %s, sleep case %s" % (kills_processed,caught_exception))
 				sys.exit(0)
 			else:
 				writelog(script_pid, "EXCEPTION FOUND: invalid value for `kills_processed`=%s, exception=%s" % (kills_processed, caught_exception), True)
