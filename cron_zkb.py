@@ -78,26 +78,30 @@ def writelog(pid, message, push_email=False):
 			writelog(pid, "FAILED TO SEND EMAIL TO %s" % email_recipients, False)
 
 def get_lock(process_name):
-    global lock_socket   # Without this our lock gets garbage collected
+    #Stolen from: http://stackoverflow.com/a/7758075
+		global lock_socket   # Without this our lock gets garbage collected
     lock_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
     try:
         lock_socket.bind('\0' + process_name)
-        print 'I got the lock'
+        writelog(pid, "PID-Lock acquired")
     except socket.error:
-        print 'lock exists'
+        writelog(pid, "PID already locked.  Quitting")
         sys.exit()
 
 				
 def _initSQL(table_name, pid=script_pid):
 	#global db_con, db_cur
+	try:
+		db_con = MySQLdb.connect(
+			host   = db_host,
+			user   = db_user,
+			passwd = db_pw,
+			port   = db_port,
+			db     = db_schema)
+		db_cur = db_con.cursor()
+	except OperationalError as e:	#Unable to connect to SQL instance
+		writelog(pid, '%s.%s:\tERROR: %s' % (db_schema, table_name, e[1]), True)
 	
-	db_con = MySQLdb.connect(
-		host   = db_host,
-		user   = db_user,
-		passwd = db_pw,
-		port   = db_port,
-		db     = db_schema)
-	db_cur = db_con.cursor()
 	db_cur.execute('''SHOW TABLES LIKE \'%s\'''' % table_name)
 	db_exists = len(db_cur.fetchall())
 	if db_exists:
@@ -109,8 +113,7 @@ def _initSQL(table_name, pid=script_pid):
 			for command in table_init_commands:
 				db_cur.execute(command)
 				db_con.commit()
-		except Exception as e:
-			#TODO: push critical errors to email log (SQL error)
+		except Exception as e: #Unable to create desired table
 			writelog(pid, '%s.%s:\tERROR: %s' % (db_schema, table_name, e[1]), True)
 			sys.exit(2)
 		writelog(pid, '%s.%s:\tCREATED' % (db_schema, table_name))
@@ -152,6 +155,7 @@ def main():
 		else: sys.exit(0)
 	else:
 		get_lock(scriptName) 
+		
 #### Set up db connections for query/write ####
 	global db_partcipants
 	db_partcipants = _initSQL(tableName_participants, script_pid)	
