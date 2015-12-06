@@ -45,10 +45,21 @@ email_port				= str(conf.get('LOGGING', 'email_port'))
 class DB_handle (object):
 	#Designed to hold SQL connection info
 	#Though, most tables should be on same schema?
+	
 	def __init__ (self, db_con, db_cur, table_name):
 		self.db_con = db_con
 		self.db_cur = db_cur
 		self.table_name = table_name
+		self.raw_headers = []
+		self.raw_headers = self.fetch_table_headers()
+		self.table_headers = ','.join(self.raw_headers)
+	def fetch_table_headers(self):
+		self.db_cur.execute('''SHOW COLUMNS FROM `%s`''' % self.table_name)
+		raw_headers = self.db_cur.fetchall()
+		tmp_headers = []
+		for row in raw_headers:
+			tmp_headers.append(row[0])
+		return tmp_headers
 	def __str__ (self):
 		return self.table_name
 
@@ -133,8 +144,6 @@ def _initSQL(table_name, pid=script_pid):
 	for row in raw_headers:
 		tmp_headers.append(row[0])
 	
-	global table_header
-	table_header = ','.join(tmp_headers)
 	db_obj = DB_handle(db_con, db_cur, table_name)	#put db parts in a class for better portability
 	return db_obj
 
@@ -233,7 +242,7 @@ def main():
 		
 #### Set up db connections for query/write ####
 	global db_partcipants
-	db_partcipants = _initSQL(tableName_participants, script_pid)	
+	db_partcipants = _initSQL(tableName_participants, script_pid)
 	global db_fits
 	db_fits = _initSQL(tableName_fits, script_pid)
 	global db_losses
