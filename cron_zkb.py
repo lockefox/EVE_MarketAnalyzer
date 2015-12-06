@@ -15,8 +15,9 @@ thread_exit_flag = False
 
 db_partcipants = None
 db_fits = None
-#db_con = None
-#db_cur = None
+db_crestInfo = None
+db_losses = None
+
 
 ##### GLOBAL VARS #####
 script_pid = ""
@@ -24,6 +25,7 @@ debug = False
 tableName_participants	= conf.get('TABLES', 'zkb_participants')
 tableName_fits        	= conf.get('TABLES', 'zkb_fits')
 tableName_losses       	= conf.get('TABLES', 'zkb_trunc_stats')
+tableName_crestInfo			= conf.get('TABLES', 'zkb_crest_info')
 scriptName = "cron_zkb" #used for PID locking
 
 compressed_logging	= int(conf.get('CRON', 'compressed_logging'))
@@ -54,7 +56,7 @@ class DB_handle (object):
 		self.raw_headers = self.fetch_table_headers()
 		self.table_headers = ','.join(self.raw_headers)
 	def fetch_table_headers(self):
-		self.db_cur.execute('''SHOW COLUMNS FROM `%s`''' % self.table_name)
+		self.db_cur.execute('''SHOW COLUMNS FROM `%s`''' % self.table_name) #MySQL only
 		raw_headers = self.db_cur.fetchall()
 		tmp_headers = []
 		for row in raw_headers:
@@ -247,7 +249,8 @@ def main():
 	db_fits = _initSQL(tableName_fits, script_pid)
 	global db_losses
 	db_losses = _initSQL(tableName_losses, script_pid)
-	
+	global db_crestInfo
+	db_crestInfo = _initSQL(tableName_crestInfo, script_pid)
 	#db_partcipants.db_cur.execute('''SHOW COLUMNS FROM `%s`''' % tableName_participants)
 	#print db_partcipants.db_cur.fetchall()
 	
