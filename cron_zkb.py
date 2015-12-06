@@ -26,10 +26,21 @@ tableName_fits        	= conf.get('TABLES', 'zkb_fits')
 tableName_losses       	= conf.get('TABLES', 'zkb_trunc_stats')
 scriptName = "cron_zkb" #used for PID locking
 
-compressed_logging = int(conf.get('CRON', 'compressed_logging'))
+compressed_logging	= int(conf.get('CRON', 'compressed_logging'))
+zkb_exception_limit	= int(conf.get('CRON', 'zkb_exception_limit'))
+redisq_url					= conf.get('CRON', 'zkb_redis_link')
+
 script_dir_path = "%s/logs/" % os.path.dirname(os.path.realpath(__file__))
 if not os.path.exists(script_dir_path):
 	os.makedirs(script_dir_path)
+
+#### MAIL STUFF ####
+email_source			= str(conf.get('LOGGING', 'email_source'))
+email_recipients	= str(conf.get('LOGGING', 'email_recipients'))
+email_username		= str(conf.get('LOGGING', 'email_username'))
+email_secret			= str(conf.get('LOGGING', 'email_secret'))
+email_server			= str(conf.get('LOGGING', 'email_server'))
+email_port				= str(conf.get('LOGGING', 'email_port'))
 
 class DB_handle (object):
 	#Designed to hold SQL connection info
@@ -78,17 +89,16 @@ def writelog(pid, message, push_email=False):
 			writelog(pid, "FAILED TO SEND EMAIL TO %s" % email_recipients, False)
 
 def get_lock(process_name):
-    #Stolen from: http://stackoverflow.com/a/7758075
-		global lock_socket   # Without this our lock gets garbage collected
-    lock_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-    try:
-        lock_socket.bind('\0' + process_name)
-        writelog(pid, "PID-Lock acquired")
-    except socket.error:
-        writelog(pid, "PID already locked.  Quitting")
-        sys.exit()
-
-				
+	#Stolen from: http://stackoverflow.com/a/7758075
+	global lock_socket   # Without this our lock gets garbage collected
+	lock_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+	try:
+		lock_socket.bind('\0' + process_name)
+		writelog(pid, "PID-Lock acquired")
+	except socket.error:
+		writelog(pid, "PID already locked.  Quitting")
+		sys.exit()
+	
 def _initSQL(table_name, pid=script_pid):
 	#global db_con, db_cur
 	try:
@@ -127,7 +137,71 @@ def _initSQL(table_name, pid=script_pid):
 	table_header = ','.join(tmp_headers)
 	db_obj = DB_handle(db_con, db_cur, table_name)	#put db parts in a class for better portability
 	return db_obj
-	
+
+def fetch_data(pid, debug=False):
+	#if debug: print "\tfetch_data()"
+	fetch_url = redisq_url
+	POST_values = {
+		'accept-encoding' : 'gzip',
+		'user-agent'      : user_agent,
+		}
+	last_error = ""
+	for tries in range (0,retry_limit):
+		time.sleep(sleep_timer * tries)
+		try:
+			request = requests.post(fetch_url, 
+				data=POST_values,
+				timeout=(default_timeout,default_readtimeout))			
+		except requests.exceptions.ConnectionError as e:
+			last_error = 'connectionError %s' % e
+			writelog( pid, last_error )
+			continue
+		except requests.exceptions.ConnectTimeout as e:	
+			last_error =  'connectionTimeout %s' % e
+			write_log( pid, last_error )
+			continue
+		except requests.exceptions.ReadTimeout as e:	
+			last_error = 'readTimeout %s' % e
+			writelog( pid, last_error )
+			continue
+		
+		if request.status_code == requests.codes.ok:
+			try:
+				request.json()
+			except ValueError:
+				last_error = 'response not JSON'
+				writelog( pid, last_error )
+				continue
+			break	#if all OK, break out of error checking
+		else:
+			last_error = 'bad status code: %s' % request.status_code
+			writelog( pid, last_error )
+			continue
+	else:
+		raise last_error	#let main handle final crash/retry logic 
+	##	error_msg = '''ERROR: unhandled exception fetching from EC
+	##url: {fetch_url}
+	##errorMsg: {last_error}
+	##Likely cases: 
+	##	-- TODO'''
+	##	error_msg = error_msg.format(
+	##		fetch_url  = fetch_url,
+	##		last_error = last_error
+	##		)
+	##	writelog(pid, error_msg, True)
+	##	sys.exit(0)
+	return request.json()
+
+def save_killInfo (kill_obj, debug=False):
+	#if debug: print "save_killInfo()"
+	kill_info = kill_obj['package']
+	try:
+		killID = kill_info['killID']
+	except KeyError as e:
+		raise e #let main handle final crash/retry logic 
+	if debug: print killID
+		
+		
 def main():
 	table_cleanup = False
 	global script_pid, debug
@@ -143,11 +217,12 @@ def main():
 	for opt, arg in opts:
 		if opt == '--cleanup':
 			table_cleanup = True
-			writelog(pid, "Executing table cleanup" % snapshot_table)
+			writelog(script_pid, "Executing table cleanup" % snapshot_table)
 		elif opt == "--debug":
 			debug = True
 		else:
 			assert False
+			
 #### Figure out if program is already running ####
 	if platform.system() == "Windows":
 		print "PID Locking not supported on windows"
@@ -169,9 +244,63 @@ def main():
 	
 #### Fetch zkb redisq data ####
 	package_null = False
+	kills_processed = 0
+	fail_count = 0
 	while (not package_null):
-		None
-	
+		caught_exception = ''
+		try:
+			kill_data = fetch_data(script_pid, debug)
+		except Exception as e:
+			caught_exception = e
+			
+		try:
+			save_killInfo(kill_data, debug)
+		except Exception as e:
+			caught_exception = e
+			
+		if caught_exception:	#check to see if parsing should end
+			if kills_processed == 0:
+				if fail_count >= zkb_exception_limit:
+					error_msg = '''EXCEPTION FOUND: no kills_processed, and fail_count exceeded.  Probable error.
+	kills_processed = {kills_processed}
+	fail_count = {fail_count}
+	exception = {caught_exception}'''
+					error_msg = error_msg.format(
+						kills_processed = kills_processed,
+						fail_count = fail_count,
+						caught_exception = caught_exception
+						)
+					writelog(script_pid, error_msg, True)
+					
+				writelog(script_pid, "EXCEPTION FOUND: but kills_processed = %s, retry case" % kills_processed)
+				#kills_processed += 1
+				fail_count += 1 
+				continue
+			elif kills_processed > 0:
+				writelog(script_pid, "EXCEPTION FOUND: kills_processed = %s, sleep case" % kills_processed)
+				sys.exit(0)
+			else:
+				writelog(script_pid, "EXCEPTION FOUND: invalid value for `kills_processed`=%s, exception=%s" % (kills_processed, caught_exception), True)
+			
+		kills_processed += 1 
+		##kill_data = fetch_data(script_pid, debug)
+		##empty_check = ""
+		##try:
+		##	empty_check = kill_data['package'].lower()
+		##except AttributeError as e:
+		##	print "not 'null'"
+		##if empty_check == 'null':	#TODO: reverse logic?
+		##	if kills_processed > 0:
+		##		writelog(pid, "Kill processing complete: kills processed=%s" % kills_processed)
+		##	elif kills_processed == 0:
+		##		writelog(pid, "Blank returned as first query.  Retrying")
+		##	else:
+		##		if debug: print "invalid value for `kills_processed`=%s" % kills_processed
+		##		writelog(pid, "invalid value for `kills_processed`=%s" % kills_processed, True)
+		##
+		##kills_processed += 1
+		##if debug: print kill_data['package']['killID']
+		
 if __name__ == "__main__":
 	try:
 		main()
