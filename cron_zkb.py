@@ -32,7 +32,7 @@ scriptName = "cron_zkb" #used for PID locking
 compressed_logging	= int(conf.get('CRON', 'compressed_logging'))
 zkb_exception_limit	= int(conf.get('CRON', 'zkb_exception_limit'))
 redisq_url					= conf.get('CRON', 'zkb_redis_link')
-
+retry_sleep					= int(conf.get('ZKB', 'default_sleep'))
 script_dir_path = "%s/logs/" % os.path.dirname(os.path.realpath(__file__))
 if not os.path.exists(script_dir_path):
 	os.makedirs(script_dir_path)
@@ -207,25 +207,33 @@ def fetch_data(pid, debug=False):
 def test_killInfo (kill_obj, pid=script_pid, debug=False):
 	#if debug: print "save_killInfo()"
 	kill_info = kill_obj['package']
+	if kill_info == None:
+		writelog(pid, "ERROR: empty response")
+		#raise "empty response"
+		return "empty response"
 	try:	#check that the critical pieces of any kill are in tact
 		killID		= int(kill_obj['package']['killID'])
 		hash 			= kill_info['zkb']['hash']
 		killTime	= kill_info['killmail']['killTime']
 	except KeyError as e:
 		writelog(pid, "ERROR: critical key check failed: %s" % e)
-		raise e #let main handle final crash/retry logic 	
+		#raise e #let main handle final crash/retry logic 	
+		return e #let main handle final crash/retry logic 	
 	except TypeError as e:
 		writelog(pid, "ERROR: critical key check failed: %s" % e)
-		raise e #let main handle final crash/retry logic 		
+		#raise e #let main handle final crash/retry logic 		
+		return e #let main handle final crash/retry logic 		
 	if debug: print "%s @ %s" % (killID, killTime)
 		
 	try:
 		killTime_datetime = datetime.strptime(killTime, "%Y.%m.%d %H:%M:%S") #2015.12.06 02:12:30
 	except ValueError as e:
-		raise e #let main handle final crash/retry logic 
 		writelog(pid, "ERROR: unable to convert `killTime`:%s %s" % (killTime, e))		
+		#raise e #let main handle final crash/retry logic 
+		return e #let main handle final crash/retry logic 
 	
 	writelog(pid, "killID: %s PASS: critical key check" % killID)
+	return '' #return empty string
 
 def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 	## Global vars (every commit)
@@ -237,6 +245,9 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		killTime_datetime = datetime.strptime(killTime_str, "%Y.%m.%d %H:%M:%S") #2015.12.06 02:12:30
 		killTime = killTime_datetime.strftime("%Y-%m-%d %H:%M:%S")
 	except KeyError as e:
+		raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
+		writelog(pid, "JSON error %s: %s" % (e,raw_json), True)
+	except TypeError as e:	#TODO: nasty crash error should be handled by test_killInfo()
 		raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
 		writelog(pid, "JSON error %s: %s" % (e,raw_json), True)
 	## Victim Info
@@ -519,7 +530,39 @@ def process_locations(kill_data, dbObj, pid=script_pid, debug=False):
 	writelog(pid, "killID: %s -- Locations written" % killID)
 	
 def process_crestInfo(kill_data, dbObj, pid=script_pid, debug=False):
-	None
+	datetime_now = datetime.utcnow()
+	record_processed = datetime_now.strftime("Y-%m-%d %H:%M:%S")
+	try:
+		killID				= int(kill_data['package']['killID'])
+		hash					= 		kill_data['package']['zkb']['hash']
+		killTime_str	=     kill_data['package']['killmail']['killTime']
+		killTime_datetime = datetime.strptime(killTime_str, "%Y.%m.%d %H:%M:%S") #2015.12.06 02:12:30
+		killTime = killTime_datetime.strftime("%Y-%m-%d %H:%M:%S")
+	except KeyError as e:
+		raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
+		writelog(pid, "JSON error %s: %s" % (e,raw_json), True)	
+		
+	base_commit_str = '''INSERT IGNORE INTO {table_name} ({table_headers}) VALUES'''
+	base_commit_str = base_commit_str.format(
+		table_name 		= dbObj.table_name,
+		table_headers	= dbObj.table_headers
+		)
+	crestInfo = \
+	'''({killID},'{hash}','{kill_time}','{record_processed}')'''
+	crestInfo = crestInfo.format(
+		killID						= killID,
+		hash							= hash,
+		kill_time					= killTime,
+		record_processed	= record_processed
+		)
+	
+	commit_str = '''{base_commit_str} {crestInfo}'''
+	commit_str = commit_str.format(
+		base_commit_str = base_commit_str,
+		crestInfo				= crestInfo
+		)
+	writeSQL(commit_str, dbObj, script_pid, debug)
+	writelog(pid, "killID: %s -- crestInfo written" % killID)
 
 def writeSQL(commit_str, dbObj, pid=script_pid, debug=False):
 	#if debug: print "%s: %s" % (dbObj, commit_str)
@@ -592,7 +635,9 @@ def main():
 			caught_exception = e
 			
 		try:
-			test_killInfo(kill_data, script_pid, debug)
+			custom_exception = test_killInfo(kill_data, script_pid, debug)
+			caught_exception = "%s%s" % (caught_exception, custom_exception)
+			#TODO: write custom Exception class for critical errors
 		except Exception as e:
 			caught_exception = e
 		
@@ -604,6 +649,7 @@ def main():
 		
 		if caught_exception:	#check to see if parsing should end
 			if kills_processed == 0:
+				time.sleep(retry_sleep)
 				if fail_count >= zkb_exception_limit:
 					error_msg = '''EXCEPTION FOUND: no kills_processed, and fail_count exceeded.  Probable error.
 	kills_processed = {kills_processed}
