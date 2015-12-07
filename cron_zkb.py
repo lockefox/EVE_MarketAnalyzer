@@ -222,7 +222,7 @@ def test_killInfo (kill_obj, pid=script_pid, debug=False):
 		raise e #let main handle final crash/retry logic 
 		writelog(pid, "ERROR: unable to convert `killTime`:%s %s" % (killTime, e))		
 	
-	writelog(pid, "PASS: critical key check passed.  killID=%s" % killID)
+	writelog(pid, "killID: %s -- PASS: critical key check" % killID)
 
 def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 	## Global vars (every commit)
@@ -339,7 +339,7 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		commit_str = "%s, %s" % (commit_str, attackerInfo)
 	
 	writeSQL(commit_str, dbObj, script_pid, debug)
-	writelog(pid, "killID: %s -- Participants written")
+	writelog(pid, "killID: %s -- Participants written" % killID)
 	
 def process_fits(kill_data, dbObj, pid=script_pid, debug=False):
 	killID 				= int(kill_data['package']['killID'])
@@ -392,7 +392,7 @@ def process_fits(kill_data, dbObj, pid=script_pid, debug=False):
 			)
 		commit_str = "%s, %s" % (commit_str, itemInfo)
 	writeSQL(commit_str, dbObj, script_pid, debug)
-	writelog(pid, "killID: %s -- Fits written")
+	writelog(pid, "killID: %s -- Fits written" % killID)
 	
 def process_losses(kill_data, dbObj, pid=script_pid, debug=False):
 	None
