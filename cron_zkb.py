@@ -208,7 +208,7 @@ def test_killInfo (kill_obj, pid=script_pid, debug=False):
 	#if debug: print "save_killInfo()"
 	kill_info = kill_obj['package']
 	try:	#check that the critical pieces of any kill are in tact
-		killID		= kill_info['killID']
+		killID		= int(kill_data['package']['killID'])
 		hash 			= kill_info['zkb']['hash']
 		killTime	= kill_info['killmail']['killTime']
 	except KeyError as e:
@@ -235,11 +235,18 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 	
 	## Victim Info
 	isVictim = 1
-	shipTypeID		= int(kill_data['package']['killmail']['victim']['shipType']['id'])
-	weaponType		= 'NULL'
-	damage				= int(kill_data['package']['killmail']['victim']['damageTaken'])
-	characterID		= int(kill_data['package']['killmail']['victim']['character']['id'])
-	corporationID	= int(kill_data['package']['killmail']['victim']['corporation']['id'])
+	try:
+		characterID		= int(kill_data['package']['killmail']['victim']['character']['id'])
+	except KeyError as e:
+		characterID		= -1 #POS equipment doesn't have a characterID 
+	try:
+		shipTypeID		= int(kill_data['package']['killmail']['victim']['shipType']['id'])
+		weaponType		= 'NULL'
+		damage				= int(kill_data['package']['killmail']['victim']['damageTaken'])		
+		corporationID	= int(kill_data['package']['killmail']['victim']['corporation']['id'])
+	except Exception as e:
+		raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
+		writelog(pid, "JSON error %s: %s" % (e,raw_json), True)
 	try:
 		allianceID = int(kill_data['package']['killmail']['victim']['alliance']['id'])
 	except KeyError as e:
@@ -248,7 +255,6 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		factionID = int(kill_data['package']['killmail']['victim']['faction']['id'])
 	except KeyError as e:
 		factionID = 'NULL'
-	totalValue = 'NULL' #TODO: work on CREST enabled calculation
 	finalBlow = 'NULL'
 	
 	## Commit str start
@@ -259,7 +265,7 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		)
 		
 	victimInfo = \
-	'''({killID},{solarSystemID},'{kill_time}',{isVictim},{shipTypeID},{weaponType},{damage},{characterID},{corporationID},{allianceID},{factionID},{finalBlow},{totalValue},{locationID}'''
+	'''({killID},{solarSystemID},'{kill_time}',{isVictim},{shipTypeID},{weaponType},{damage},{characterID},{corporationID},{allianceID},{factionID},{finalBlow},{locationID})'''
 	victimInfo = victimInfo.format(
 		killID 				= killID,
 		solarSystemID = solarSystemID,
@@ -273,10 +279,9 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		allianceID		= allianceID,
 		factionID			= factionID,
 		finalBlow			= finalBlow,
-		totalValue		= totalValue,
 		locationID		= locationID
 		)
-	if debug: print victimInfo
+	#if debug: print victimInfo
 	
 	commit_str = '''{base_commit_str} {victimInfo}'''
 	commit_str = commit_str.format(
@@ -286,11 +291,26 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		
 	for attackerObj in kill_data['package']['killmail']['attackers']:
 		isVictim = 0 
-		shipTypeID		= int(attackerObj['shipType']['id'])
-		weaponType		= int(attackerObj['weaponType']['id'])
-		damage				= int(attackerObj['damageDone'])
-		characterID		= int(attackerObj['character']['id'])
-		corporationID	= int(attackerObj['corporation']['id'])
+		try:
+			shipTypeID		= int(attackerObj['shipType']['id'])
+		except KeyError as e:
+			shipTypeID		= -1 #shiptype can be blank on a record.  Ship lost in combat
+		try:
+			weaponType		= int(attackerObj['weaponType']['id'])
+		except KeyError as e:
+			weaponType		= 'NULL'
+		try:
+			characterID		= int(attackerObj['character']['id'])
+			corporationID	= int(attackerObj['corporation']['id'])
+		except KeyError as e:
+			characterID		= -1	#NPC in killmail
+			corporationID	= -1
+		try:
+			damage				= int(attackerObj['damageDone'])			
+		except Exception as e:
+			raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
+			raw_attackers = json.dumps(attackerObj, sort_keys=True, indent=4, separators=(',', ': '))
+			writelog(pid, "JSON error %s: %s\n%s" % (e,raw_json,raw_attackers), True)
 		try:
 			allianceID = int(attackerObj['alliance']['id'])
 		except KeyError as e:
@@ -302,7 +322,7 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		finalBlow = int(attackerObj['finalBlow'])
 		
 		attackerInfo = \
-		'''({killID},{solarSystemID},'{kill_time}',{isVictim},{shipTypeID},{weaponType},{damage},{characterID},{corporationID},{allianceID},{factionID},{finalBlow},{totalValue},{locationID}'''
+		'''({killID},{solarSystemID},'{kill_time}',{isVictim},{shipTypeID},{weaponType},{damage},{characterID},{corporationID},{allianceID},{factionID},{finalBlow},{locationID})'''
 		attackerInfo = attackerInfo.format(
 		killID 				= killID,
 		solarSystemID = solarSystemID,
@@ -316,7 +336,6 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		allianceID		= allianceID,
 		factionID			= factionID,
 		finalBlow			= finalBlow,
-		totalValue		= totalValue,
 		locationID		= locationID
 		)
 		commit_str = "%s, %s" % (commit_str, attackerInfo)
@@ -337,7 +356,7 @@ def process_crestInfo(kill_data, dbObj, pid=script_pid, debug=False):
 	None
 
 def writeSQL(commit_str, dbObj, pid=script_pid, debug=False):
-	if debug: print "%s: %s" % (dbObj, commit_str)
+	#if debug: print "%s: %s" % (dbObj, commit_str)
 	try:
 		dbObj.db_cur.execute(commit_str)
 		dbObj.db_con.commit()
