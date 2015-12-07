@@ -229,7 +229,7 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 	killID 				= int(kill_data['package']['killID'])
 	solarSystemID	= int(kill_data['package']['killmail']['solarSystem']['id'])
 	killTime_str	=     kill_data['package']['killmail']['killTime']
-	locationID		= int(kill_data['package']['zkb']['locationID'])
+	#locationID		= int(kill_data['package']['zkb']['locationID'])
 	killTime_datetime = datetime.strptime(killTime_str, "%Y.%m.%d %H:%M:%S") #2015.12.06 02:12:30
 	killTime = killTime_datetime.strftime("%Y-%m-%d %H:%M:%S")
 	
@@ -265,7 +265,7 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		)
 		
 	victimInfo = \
-	'''({killID},{solarSystemID},'{kill_time}',{isVictim},{shipTypeID},{weaponType},{damage},{characterID},{corporationID},{allianceID},{factionID},{finalBlow},{locationID})'''
+	'''({killID},{solarSystemID},'{kill_time}',{isVictim},{shipTypeID},{weaponType},{damage},{characterID},{corporationID},{allianceID},{factionID},{finalBlow})'''
 	victimInfo = victimInfo.format(
 		killID 				= killID,
 		solarSystemID = solarSystemID,
@@ -278,8 +278,7 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		corporationID = corporationID,
 		allianceID		= allianceID,
 		factionID			= factionID,
-		finalBlow			= finalBlow,
-		locationID		= locationID
+		finalBlow			= finalBlow
 		)
 	#if debug: print victimInfo
 	
@@ -322,7 +321,7 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		finalBlow = int(attackerObj['finalBlow'])
 		
 		attackerInfo = \
-		'''({killID},{solarSystemID},'{kill_time}',{isVictim},{shipTypeID},{weaponType},{damage},{characterID},{corporationID},{allianceID},{factionID},{finalBlow},{locationID})'''
+		'''({killID},{solarSystemID},'{kill_time}',{isVictim},{shipTypeID},{weaponType},{damage},{characterID},{corporationID},{allianceID},{factionID},{finalBlow})'''
 		attackerInfo = attackerInfo.format(
 		killID 				= killID,
 		solarSystemID = solarSystemID,
@@ -335,8 +334,7 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		corporationID = corporationID,
 		allianceID		= allianceID,
 		factionID			= factionID,
-		finalBlow			= finalBlow,
-		locationID		= locationID
+		finalBlow			= finalBlow
 		)
 		commit_str = "%s, %s" % (commit_str, attackerInfo)
 	
