@@ -322,7 +322,8 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		commit_str = "%s, %s" % (commit_str, attackerInfo)
 	
 	writeSQL(commit_str, dbObj, script_pid, debug)
-		
+	writelog(pid, "killID: %s -- Participants written")
+	
 def process_fits(kill_data, dbObj, pid=script_pid, debug=False):
 	None
 	
@@ -336,7 +337,21 @@ def process_crestInfo(kill_data, dbObj, pid=script_pid, debug=False):
 	None
 
 def writeSQL(commit_str, dbObj, pid=script_pid, debug=False):
-	None 
+	if debug: print "%s: %s" % (dbObj, commit_str)
+	try:
+		dbObj.db_cur.execute(commit_str)
+		dbObj.db_con.commit()
+	except Exception, e:
+		error_str = '''ERROR: unable to insert into database
+	Error msg: {exception_val}
+	Commit str: {commit_str}'''
+		error_str = error_str.format(
+			exception_val = e[1],
+			commit_str = commit_str
+			)
+		writelog(pid, error_str, True)
+		sys.exit(2)
+		
 def main():
 	table_cleanup = False
 	global script_pid, debug
