@@ -6,10 +6,10 @@ CREATE TABLE `kill_fits`(
 	-- `allianceID` int(16) DEFAULT NULL,
 	-- `factionID` int(16) DEFAULT NULL,
 	`shipTypeID` int(8) NOT NULL, -- probably could move to item list
-	`typeID` int(8) NOT NULL,
-	`flag` int(8) NOT NULL,
-	`qtyDropped` int(32) NOT NULL DEFAULT 0,
-	`qtyDestroyed` int(32) NOT NULL DEFAULT 0,
-	`singleton` tinyint(1) NOT NULL DEFAULT 0,
+	`typeID` int(8) DEFAULT NULL,
+	`flag` int(8) DEFAULT NULL,
+	`qtyDropped` int(32) DEFAULT 0,
+	`qtyDestroyed` int(32) DEFAULT 0,
+	`singleton` tinyint(1) DEFAULT 0,
 	PRIMARY KEY (killID,typeID,flag))
 ENGINE=InnoDB DEFAULT CHARSET=latin1

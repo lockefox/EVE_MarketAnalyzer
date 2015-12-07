@@ -323,26 +323,76 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		attackerInfo = \
 		'''({killID},{solarSystemID},'{kill_time}',{isVictim},{shipTypeID},{weaponType},{damage},{characterID},{corporationID},{allianceID},{factionID},{finalBlow})'''
 		attackerInfo = attackerInfo.format(
-		killID 				= killID,
-		solarSystemID = solarSystemID,
-		kill_time			= killTime,
-		isVictim			= isVictim,
-		shipTypeID		= shipTypeID,
-		weaponType		= weaponType,
-		damage				= damage,
-		characterID		= characterID,
-		corporationID = corporationID,
-		allianceID		= allianceID,
-		factionID			= factionID,
-		finalBlow			= finalBlow
-		)
+			killID 				= killID,
+			solarSystemID = solarSystemID,
+			kill_time			= killTime,
+			isVictim			= isVictim,
+			shipTypeID		= shipTypeID,
+			weaponType		= weaponType,
+			damage				= damage,
+			characterID		= characterID,
+			corporationID = corporationID,
+			allianceID		= allianceID,
+			factionID			= factionID,
+			finalBlow			= finalBlow
+			)
 		commit_str = "%s, %s" % (commit_str, attackerInfo)
 	
 	writeSQL(commit_str, dbObj, script_pid, debug)
 	writelog(pid, "killID: %s -- Participants written")
 	
 def process_fits(kill_data, dbObj, pid=script_pid, debug=False):
-	None
+	killID 				= int(kill_data['package']['killID'])
+	shipTypeID		= int(kill_data['package']['killmail']['victim']['shipType']['id'])
+	
+	base_commit_str = '''INSERT IGNORE INTO {table_name} ({table_headers}) VALUES'''
+	base_commit_str = base_commit_str.format(
+		table_name 		= dbObj.table_name,
+		table_headers	= dbObj.table_headers
+		)
+	ship_commit_str = \
+	'''({killID},{shipTypeID},{typeID},{flag},{qtyDropped},{qtyDestroyed},{singleton})'''
+	ship_commit_str = ship_commit_str.format(
+		killID 				= killID,
+		shipTypeID		= shipTypeID,
+		typeID				= shipTypeID,
+		flag					= -1,
+		qtyDropped		= 0,
+		qtyDestroyed	= 1,
+		singleton			= 'NULL'
+		)
+	commit_str = '''{base_commit_str} {ship_commit_str}'''
+	commit_str = commit_str.format(
+		base_commit_str = base_commit_str,
+		ship_commit_str = ship_commit_str
+		)
+		
+	for itemObj in kill_data['package']['killmail']['victim']['items']:
+		typeID	= int(itemObj['itemType']['id'])
+		flag		= int(itemObj['flag'])
+		try:
+			qtyDropped	= int(itemObj['quantityDropped'])
+		except KeyError as e:
+			qtyDropped	= 0
+		try:
+			qtyDestroyed	= int(itemObj['quantityDestroyed'])
+		except KeyError as e:
+			qtyDestroyed	= 0
+		singleton	= int(itemObj['singleton'])
+		itemInfo = \
+		'''({killID},{shipTypeID},{typeID},{flag},{qtyDropped},{qtyDestroyed},{singleton})'''
+		itemInfo = itemInfo.format(
+			killID 				= killID,
+			shipTypeID		= shipTypeID,
+			typeID				= typeID,
+			flag					= flag,
+			qtyDropped		= qtyDropped,
+			qtyDestroyed	= qtyDestroyed,
+			singleton			= singleton
+			)
+		commit_str = "%s, %s" % (commit_str, itemInfo)
+	writeSQL(commit_str, dbObj, script_pid, debug)
+	writelog(pid, "killID: %s -- Fits written")
 	
 def process_losses(kill_data, dbObj, pid=script_pid, debug=False):
 	None
