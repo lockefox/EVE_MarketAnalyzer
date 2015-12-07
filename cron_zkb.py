@@ -226,13 +226,16 @@ def test_killInfo (kill_obj, pid=script_pid, debug=False):
 
 def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 	## Global vars (every commit)
-	killID 				= int(kill_data['package']['killID'])
-	solarSystemID	= int(kill_data['package']['killmail']['solarSystem']['id'])
-	killTime_str	=     kill_data['package']['killmail']['killTime']
-	#locationID		= int(kill_data['package']['zkb']['locationID'])
-	killTime_datetime = datetime.strptime(killTime_str, "%Y.%m.%d %H:%M:%S") #2015.12.06 02:12:30
-	killTime = killTime_datetime.strftime("%Y-%m-%d %H:%M:%S")
-	
+	try:
+		killID 				= int(kill_data['package']['killID'])
+		solarSystemID	= int(kill_data['package']['killmail']['solarSystem']['id'])
+		killTime_str	=     kill_data['package']['killmail']['killTime']
+		#locationID		= int(kill_data['package']['zkb']['locationID'])
+		killTime_datetime = datetime.strptime(killTime_str, "%Y.%m.%d %H:%M:%S") #2015.12.06 02:12:30
+		killTime = killTime_datetime.strftime("%Y-%m-%d %H:%M:%S")
+	except KeyError as e:
+		raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
+		writelog(pid, "JSON error %s: %s" % (e,raw_json), True)
 	## Victim Info
 	isVictim = 1
 	try:
@@ -305,7 +308,8 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 			characterID		= -1	#NPC in killmail
 			corporationID	= -1
 		try:
-			damage				= int(attackerObj['damageDone'])			
+			damage				= int(attackerObj['damageDone'])	
+			finalBlow = int(attackerObj['finalBlow'])			
 		except Exception as e:
 			raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
 			raw_attackers = json.dumps(attackerObj, sort_keys=True, indent=4, separators=(',', ': '))
@@ -318,7 +322,7 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 			factionID = int(attackerObj['faction']['id'])
 		except KeyError as e:
 			factionID = 'NULL'
-		finalBlow = int(attackerObj['finalBlow'])
+		
 		
 		attackerInfo = \
 		'''({killID},{solarSystemID},'{kill_time}',{isVictim},{shipTypeID},{weaponType},{damage},{characterID},{corporationID},{allianceID},{factionID},{finalBlow})'''
@@ -342,9 +346,12 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 	writelog(pid, "killID: %s -- Participants written" % killID)
 	
 def process_fits(kill_data, dbObj, pid=script_pid, debug=False):
-	killID 				= int(kill_data['package']['killID'])
-	shipTypeID		= int(kill_data['package']['killmail']['victim']['shipType']['id'])
-	
+	try:
+		killID 				= int(kill_data['package']['killID'])
+		shipTypeID		= int(kill_data['package']['killmail']['victim']['shipType']['id'])
+	except KeyError as e:
+		raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
+		writelog(pid, "JSON error %s: %s" % (e,raw_json), True)
 	base_commit_str = '''INSERT IGNORE INTO {table_name} ({table_headers}) VALUES'''
 	base_commit_str = base_commit_str.format(
 		table_name 		= dbObj.table_name,
@@ -368,8 +375,14 @@ def process_fits(kill_data, dbObj, pid=script_pid, debug=False):
 		)
 		
 	for itemObj in kill_data['package']['killmail']['victim']['items']:
-		typeID	= int(itemObj['itemType']['id'])
-		flag		= int(itemObj['flag'])
+		try:
+			typeID	= int(itemObj['itemType']['id'])
+			flag		= int(itemObj['flag'])
+			singleton	= int(itemObj['singleton'])
+		except KeyError as e:
+			raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
+			raw_items = json.dumps(itemObj, sort_keys=True, indent=4, separators=(',', ': '))
+			writelog(pid, "JSON error %s: %s\n%s" % (e,raw_json,raw_attackers), True)
 		try:
 			qtyDropped	= int(itemObj['quantityDropped'])
 		except KeyError as e:
@@ -378,7 +391,7 @@ def process_fits(kill_data, dbObj, pid=script_pid, debug=False):
 			qtyDestroyed	= int(itemObj['quantityDestroyed'])
 		except KeyError as e:
 			qtyDestroyed	= 0
-		singleton	= int(itemObj['singleton'])
+		
 		itemInfo = \
 		'''({killID},{shipTypeID},{typeID},{flag},{qtyDropped},{qtyDestroyed},{singleton})'''
 		itemInfo = itemInfo.format(
