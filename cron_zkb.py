@@ -212,8 +212,11 @@ def test_killInfo (kill_obj, pid=script_pid, debug=False):
 		hash 			= kill_info['zkb']['hash']
 		killTime	= kill_info['killmail']['killTime']
 	except KeyError as e:
-		raise e #let main handle final crash/retry logic 
 		writelog(pid, "ERROR: critical key check failed: %s" % e)
+		raise e #let main handle final crash/retry logic 	
+	except TypeError as e:
+		writelog(pid, "ERROR: critical key check failed: %s" % e)
+		raise e #let main handle final crash/retry logic 		
 	if debug: print "%s @ %s" % (killID, killTime)
 		
 	try:
@@ -470,9 +473,50 @@ def process_losses(kill_data, dbObj, pid=script_pid, debug=False):
 		lossesInfo			= lossesInfo
 		)
 	writeSQL(commit_str, dbObj, script_pid, debug)
-	writelog(pid, "killID: %s -- Losses written" % killID)	
+	writelog(pid, "killID: %s -- Losses written" % killID)
+	
 def process_locations(kill_data, dbObj, pid=script_pid, debug=False):
-	None
+	try:
+		killID 				= int(kill_data['package']['killID'])	
+	except KeyError as e:
+		raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
+		writelog(pid, "JSON error %s: %s" % (e,raw_json), True)	
+	try:
+		locationID = int(kill_data['package']['zkb']['locationID'])
+	except KeyError as e:
+		locationID = 'NULL'
+	try:
+		x = kill_data['package']['killmail']['victim']['position']['x']
+		y = kill_data['package']['killmail']['victim']['position']['y']
+		z = kill_data['package']['killmail']['victim']['position']['z']
+	except KeyError as e:
+		x = 'NULL'
+		y = 'NULL'
+		z = 'NULL'
+	
+	base_commit_str = '''INSERT IGNORE INTO {table_name} ({table_headers}) VALUES'''
+	base_commit_str = base_commit_str.format(
+		table_name 		= dbObj.table_name,
+		table_headers	= dbObj.table_headers
+		)
+	locationInfo = \
+	'''({killID},{locationID},{x},{y},{z})'''
+	locationInfo = locationInfo.format(
+		killID			= killID,
+		locationID	= locationID,
+		x						= x,
+		y						= y,
+		z						= z,
+		)
+	
+	commit_str = '''{base_commit_str} {locationInfo}'''
+	commit_str = commit_str.format(
+		base_commit_str = base_commit_str,
+		locationInfo			= locationInfo
+		)
+	
+	writeSQL(commit_str, dbObj, script_pid, debug)
+	writelog(pid, "killID: %s -- Locations written" % killID)
 	
 def process_crestInfo(kill_data, dbObj, pid=script_pid, debug=False):
 	None
