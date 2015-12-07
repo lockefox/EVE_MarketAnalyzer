@@ -208,7 +208,7 @@ def test_killInfo (kill_obj, pid=script_pid, debug=False):
 	#if debug: print "save_killInfo()"
 	kill_info = kill_obj['package']
 	try:	#check that the critical pieces of any kill are in tact
-		killID		= int(kill_data['package']['killID'])
+		killID		= int(kill_obj['package']['killID'])
 		hash 			= kill_info['zkb']['hash']
 		killTime	= kill_info['killmail']['killTime']
 	except KeyError as e:
