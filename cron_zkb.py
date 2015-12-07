@@ -222,7 +222,7 @@ def test_killInfo (kill_obj, pid=script_pid, debug=False):
 		raise e #let main handle final crash/retry logic 
 		writelog(pid, "ERROR: unable to convert `killTime`:%s %s" % (killTime, e))		
 	
-	writelog(pid, "killID: %s -- PASS: critical key check" % killID)
+	writelog(pid, "killID: %s PASS: critical key check" % killID)
 
 def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 	## Global vars (every commit)
@@ -408,8 +408,69 @@ def process_fits(kill_data, dbObj, pid=script_pid, debug=False):
 	writelog(pid, "killID: %s -- Fits written" % killID)
 	
 def process_losses(kill_data, dbObj, pid=script_pid, debug=False):
-	None
+	try:
+		killID 				= int(kill_data['package']['killID'])
+		solarSystemID	= int(kill_data['package']['killmail']['solarSystem']['id'])
+		killTime_str	=     kill_data['package']['killmail']['killTime']
+		killTime_datetime = datetime.strptime(killTime_str, "%Y.%m.%d %H:%M:%S") #2015.12.06 02:12:30
+		killTime = killTime_datetime.strftime("%Y-%m-%d %H:%M:%S")
+		shipTypeID		= int(kill_data['package']['killmail']['victim']['shipType']['id'])
+		damage				= int(kill_data['package']['killmail']['victim']['damageTaken'])		
+		corporationID	= int(kill_data['package']['killmail']['victim']['corporation']['id'])
+	except KeyError as e:
+		raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
+		writelog(pid, "JSON error %s: %s" % (e,raw_json), True)	
+	try:
+		characterID		= int(kill_data['package']['killmail']['victim']['character']['id'])
+	except KeyError as e:
+		characterID		= -1 #POS equipment doesn't have a characterID 
+	try:
+		allianceID = int(kill_data['package']['killmail']['victim']['alliance']['id'])
+	except KeyError as e:
+		allianceID = 'NULL'
+	try:
+		factionID = int(kill_data['package']['killmail']['victim']['faction']['id'])
+	except KeyError as e:
+		factionID = 'NULL'
+	try:
+		locationID = int(kill_data['package']['zkb']['locationID'])
+	except KeyError as e:
+		locationID = 'NULL'
+	try:
+		participants = len(kill_data['package']['killmail']['attackers'])
+	except KeyError as e:
+		participants = 0 #TODO: ERROR case?
+	totalValue = 'NULL' #TODO: price processing in POST 
 	
+	base_commit_str = '''INSERT IGNORE INTO {table_name} ({table_headers}) VALUES'''
+	base_commit_str = base_commit_str.format(
+		table_name 		= dbObj.table_name,
+		table_headers	= dbObj.table_headers
+		)
+	lossesInfo = \
+	'''({killID},{solarSystemID},'{kill_time}',{shipTypeID},{damage},{characterID},{corporationID},{allianceID},{factionID},{totalValue},{participants},{locationID})'''
+	lossesInfo = lossesInfo.format(
+		killID				= killID,
+		solarSystemID	= solarSystemID,
+		kill_time			= killTime,
+		shipTypeID		= shipTypeID,
+		damage				= damage,
+		characterID		= characterID,
+		corporationID	= corporationID,
+		allianceID		= allianceID,
+		factionID			= factionID,
+		totalValue		= totalValue,
+		participants	= participants,
+		locationID		= locationID
+		)
+	
+	commit_str = '''{base_commit_str} {lossesInfo}'''
+	commit_str = commit_str.format(
+		base_commit_str = base_commit_str,
+		lossesInfo			= lossesInfo
+		)
+	writeSQL(commit_str, dbObj, script_pid, debug)
+	writelog(pid, "killID: %s -- Losses written" % killID)	
 def process_locations(kill_data, dbObj, pid=script_pid, debug=False):
 	None
 	

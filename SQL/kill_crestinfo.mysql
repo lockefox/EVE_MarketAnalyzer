@@ -3,6 +3,7 @@ CREATE TABLE `kill_crestinfo` (
 	`killID` int(32) NOT NULL,
 	`hash` varchar(64) NOT NULL,
 	`kill_time` datetime NOT NULL,
+	`record_processed` datetime DEFAULT NULL,
 	-- `processed_time` datetime NULL,
 	PRIMARY KEY(killID,hash))
 ENGINE=InnoDB DEFAULT CHARSET=latin1;
