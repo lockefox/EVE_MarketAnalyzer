@@ -16,7 +16,6 @@ CREATE TABLE `kill_participants` (
 	`factionID` int(16) DEFAULT NULL,
 	-- `factionName` tinytext DEFAULT NULL,
 	`finalBlow` tinyint(1) DEFAULT NULL,
-	`weaponTypeID` int(8) DEFAULT NULL,
 	-- `points` int(8) DEFAULT NULL,
 	`totalValue` decimal(16,2) DEFAULT NULL,
   `locationID` int(8) DEFAULT NULL,

@@ -225,8 +225,104 @@ def test_killInfo (kill_obj, pid=script_pid, debug=False):
 	writelog(pid, "PASS: critical key check passed.  killID=%s" % killID)
 
 def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
-	None
+	## Global vars (every commit)
+	killID 				= int(kill_data['package']['killID'])
+	solarSystemID	= int(kill_data['package']['killmail']['solarSystem']['id'])
+	killTime_str	=     kill_data['package']['killmail']['killTime']
+	locationID		= int(kill_data['package']['zkb']['locationID'])
+	killTime_datetime = datetime.strptime(killTime_str, "%Y.%m.%d %H:%M:%S") #2015.12.06 02:12:30
+	killTime = killTime_datetime.strftime("%Y-%m-%d %H:%M:%S")
 	
+	## Victim Info
+	isVictim = 1
+	shipTypeID		= int(kill_data['package']['killmail']['victim']['shipType']['id'])
+	weaponType		= 'NULL'
+	damage				= int(kill_data['package']['killmail']['victim']['damageTaken'])
+	characterID		= int(kill_data['package']['killmail']['victim']['character']['id'])
+	corporationID	= int(kill_data['package']['killmail']['victim']['corporation']['id'])
+	try:
+		allianceID = int(kill_data['package']['killmail']['victim']['alliance']['id'])
+	except KeyError as e:
+		allianceID = 'NULL'
+	try:
+		factionID = int(kill_data['package']['killmail']['victim']['faction']['id'])
+	except KeyError as e:
+		factionID = 'NULL'
+	totalValue = 'NULL' #TODO: work on CREST enabled calculation
+	finalBlow = 'NULL'
+	
+	## Commit str start
+	base_commit_str = '''INSERT IGNORE INTO {table_name} ({table_headers}) VALUES'''
+	base_commit_str = base_commit_str.format(
+		table_name 		= dbObj.table_name,
+		table_headers	= dbObj.table_headers
+		)
+		
+	victimInfo = \
+	'''({killID},{solarSystemID},'{kill_time}',{isVictim},{shipTypeID},{weaponType},{damage},{characterID},{corporationID},{allianceID},{factionID},{finalBlow},{totalValue},{locationID}'''
+	victimInfo = victimInfo.format(
+		killID 				= killID,
+		solarSystemID = solarSystemID,
+		kill_time			= killTime,
+		isVictim			= isVictim,
+		shipTypeID		= shipTypeID,
+		weaponType		= weaponType,
+		damage				= damage,
+		characterID		= characterID,
+		corporationID = corporationID,
+		allianceID		= allianceID,
+		factionID			= factionID,
+		finalBlow			= finalBlow,
+		totalValue		= totalValue,
+		locationID		= locationID
+		)
+	if debug: print victimInfo
+	
+	commit_str = '''{base_commit_str} {victimInfo}'''
+	commit_str = commit_str.format(
+		base_commit_str = base_commit_str,
+		victimInfo			= victimInfo
+		)
+		
+	for attackerObj in kill_data['package']['killmail']['attackers']:
+		isVictim = 0 
+		shipTypeID		= int(attackerObj['shipType']['id'])
+		weaponType		= int(attackerObj['weaponType']['id'])
+		damage				= int(attackerObj['damageDone'])
+		characterID		= int(attackerObj['character']['id'])
+		corporationID	= int(attackerObj['corporation']['id'])
+		try:
+			allianceID = int(attackerObj['alliance']['id'])
+		except KeyError as e:
+			allianceID = 'NULL'
+		try:
+			factionID = int(attackerObj['faction']['id'])
+		except KeyError as e:
+			factionID = 'NULL'
+		finalBlow = int(attackerObj['finalBlow'])
+		
+		attackerInfo = \
+		'''({killID},{solarSystemID},'{kill_time}',{isVictim},{shipTypeID},{weaponType},{damage},{characterID},{corporationID},{allianceID},{factionID},{finalBlow},{totalValue},{locationID}'''
+		attackerInfo = attackerInfo.format(
+		killID 				= killID,
+		solarSystemID = solarSystemID,
+		kill_time			= killTime,
+		isVictim			= isVictim,
+		shipTypeID		= shipTypeID,
+		weaponType		= weaponType,
+		damage				= damage,
+		characterID		= characterID,
+		corporationID = corporationID,
+		allianceID		= allianceID,
+		factionID			= factionID,
+		finalBlow			= finalBlow,
+		totalValue		= totalValue,
+		locationID		= locationID
+		)
+		commit_str = "%s, %s" % (commit_str, attackerInfo)
+	
+	writeSQL(commit_str, dbObj, script_pid, debug)
+		
 def process_fits(kill_data, dbObj, pid=script_pid, debug=False):
 	None
 	
@@ -238,7 +334,9 @@ def process_locations(kill_data, dbObj, pid=script_pid, debug=False):
 	
 def process_crestInfo(kill_data, dbObj, pid=script_pid, debug=False):
 	None
-	
+
+def writeSQL(commit_str, dbObj, pid=script_pid, debug=False):
+	None 
 def main():
 	table_cleanup = False
 	global script_pid, debug
