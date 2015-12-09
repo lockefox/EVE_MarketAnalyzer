@@ -198,7 +198,7 @@ def fetch_data(itemlist, locationID, debug=False):
 			continue
 		except requests.exceptions.ConnectTimeout as e:	
 			last_error =  'connectionTimeout %s' % e
-			write_log( locationID, last_error )
+			writelog( locationID, last_error )
 			continue
 		except requests.exceptions.ReadTimeout as e:	
 			last_error = 'readTimeout %s' % e
