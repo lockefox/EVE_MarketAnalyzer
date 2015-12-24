@@ -60,6 +60,86 @@
 			"clean_up_READ":0,
 			"clean_up_WRITE":0
 		},
+		"datasci_import":{
+			"export_import":"export",
+			"tables_to_run": {
+				"snapshot_evecentral": {
+					"table_name":"snapshot_evecentral",
+					"ODBC_DSN":"backup2",
+					"create":"snapshot_evecentral.sql",
+					"query":"locationID IN (30000142,30002053,30002187,30002659)",
+					"date_range":90,
+					"sub_date_range":5
+				}
+			},
+			"destination_DSN":"evemarketdata",
+			"clean_up_READ":0,
+			"clean_up_WRITE":0
+		},
+		"datasci_export":{
+			"export_import":"export",
+			"tables_to_run": {
+				"snapshot_evecentral": {
+					"table_name":"snapshot_evecentral",
+					"ODBC_DSN":"remote_ec",
+					"create":"snapshot_evecentral.sql",
+					"query":"locationID IN (30000142,30002053,30002187,30002659)",
+					"date_range":90,
+					"sub_date_range":5
+				}
+			},
+			"destination_DSN":"evemarketdata",
+			"clean_up_READ":0,
+			"clean_up_WRITE":0
+		},
+		"datasci_backup":{
+			"export_import":"export",
+			"tables_to_run": {
+				"snapshot_evecentral": {
+					"table_name":"snapshot_evecentral",
+					"ODBC_DSN":"remote_ec",
+					"create":"snapshot_evecentral.sqlite",
+					"query":"locationID IN (30000142,30002053,30002187,30002659)",
+					"date_range":90,
+					"sub_date_range":5
+				},
+				"crest_markethistory": {
+					"table_name":"crest_markethistory",
+					"ODBC_DSN":"evemarketdata",
+					"create":"crest_markethistory.sqlite",
+					"query":"regionID IN (10000002,10000043,10000030,10000032,10000042,11000031)",
+					"date_range":400,
+					"sub_date_range":50
+				}
+			},
+			"destination_DSN":"backup2",
+			"clean_up_READ":0,
+			"clean_up_WRITE":0
+		},
+		"prod":{
+			"export_import":"export",
+			"tables_to_run": {
+				"snapshot_evecentral": {
+					"table_name":"snapshot_evecentral",
+					"ODBC_DSN":"remote_ec",
+					"create":"snapshot_evecentral.sqlite",
+					"query":"locationID=30000142",
+					"date_range":90,
+					"sub_date_range":10
+				},
+				"crest_markethistory": {
+					"table_name":"crest_markethistory",
+					"ODBC_DSN":"evemarketdata",
+					"create":"crest_markethistory.sqlite",
+					"query":"regionID=10000002",
+					"date_range":400,
+					"sub_date_range":50
+				}
+			},
+			"destination_DSN":"sqlite_connector",
+			"clean_up_READ":0,
+			"clean_up_WRITE":0
+		},
 		"test": {
 			"export_import":"export",
 			"tables_to_run": {
