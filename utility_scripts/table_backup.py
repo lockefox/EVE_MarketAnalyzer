@@ -150,7 +150,7 @@ def check_table_contents ( odbc_dsn, table_name, date_range, debug ):
 		date_str = max_date_str #explicitly pull maximum data
 	
 	db_con.close()
-	return date_str
+	return str(date_str)
 
 def validate_query ( query, date_str, table_name ):
 	return_str = ""
@@ -406,10 +406,10 @@ def main():
 			maxDate = nowTime - timedelta ( days=date_range )
 			date_str = maxDate.strftime( "%Y-%m-%d" )
 			writelog( "***query=ALL, overriding date: from=%s to=%s" % ( prev_date_str, date_str ) )
-		
+		#print date_str
 		date_str_dateTime = datetime.strptime( date_str, "%Y-%m-%d" )
 		total_range = nowTime - date_str_dateTime
-
+		#sys.exit()
 		date_query = ""
 		max_dateTime = date_str_dateTime
 		min_dateTime = date_str_dateTime
