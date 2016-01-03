@@ -45,6 +45,14 @@ email_username		= str(conf.get('LOGGING', 'email_username'))
 email_secret			= str(conf.get('LOGGING', 'email_secret'))
 email_server			= str(conf.get('LOGGING', 'email_server'))
 email_port				= str(conf.get('LOGGING', 'email_port'))
+#Test to see if all email vars are initialized
+#empty str() = False http://stackoverflow.com/questions/9573244/most-elegant-way-to-check-if-the-string-is-empty-in-python
+bool_email_init = ( bool(email_source.strip()) and\
+					bool(email_recipients.strip()) and\
+					bool(email_username.strip()) and\
+					bool(email_secret.strip()) and\
+					bool(email_server.strip()) and\
+					bool(email_port.strip()) )
 
 class zkbException(Exception):
 	def __init__ (self, exception, message):
