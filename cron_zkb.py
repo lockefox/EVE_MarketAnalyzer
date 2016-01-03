@@ -118,9 +118,9 @@ def get_lock(process_name):
 	lock_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
 	try:
 		lock_socket.bind('\0' + process_name)
-		writelog(pid, "PID-Lock acquired")
+		writelog(script_pid, "PID-Lock acquired")
 	except socket.error:
-		writelog(pid, "PID already locked.  Quitting")
+		writelog(script_pid, "PID already locked.  Quitting")
 		sys.exit()
 
 def _initSQL(table_name, pid=script_pid):
