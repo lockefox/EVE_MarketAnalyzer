@@ -679,6 +679,13 @@ def main():
 				continue
 			elif kills_processed > 0:
 				writelog(script_pid, "EXCEPTION FOUND: kills_processed = %s, sleep case %s" % (kills_processed,caught_exception))
+			#Clean up connections#
+				db_partcipants.db_con.close()
+				db_fits.db_con.close()
+				db_losses.db_con.close()
+				db_crestInfo.db_con.close()
+				db_locations.db_con.close()
+			#quit normally#
 				sys.exit(0)
 			else:
 				writelog(script_pid, "EXCEPTION FOUND: invalid value for `kills_processed`=%s, exception=%s" % (kills_processed, caught_exception), True)
