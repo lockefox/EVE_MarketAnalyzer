@@ -45,6 +45,15 @@ email_secret			= str(conf.get('LOGGING', 'email_secret'))
 email_server			= str(conf.get('LOGGING', 'email_server'))
 email_port				= str(conf.get('LOGGING', 'email_port'))
 
+class zkbException(Exception):
+	def __init__ (self, exception, message):
+		self.message = message
+		self.source_error = exception
+	def __str__ (self):
+		return "%s: %s" % (self.message, self.source_error)
+	def __nonzero__ (self):
+		return True
+		
 class DB_handle (object):
 	#Designed to hold SQL connection info
 	#Though, most tables should be on same schema?
@@ -157,36 +166,37 @@ def fetch_data(pid, debug=False):
 		'accept-encoding' : 'gzip',
 		'user-agent'      : user_agent,
 		}
-	last_error = ""
+	last_error = False
 	for tries in range (0,retry_limit):
 		time.sleep(sleep_timer * tries)
 		try:
 			request = requests.post(fetch_url, 
 				data=POST_values,
-				timeout=(default_timeout,default_readtimeout))			
+				timeout=(default_timeout,default_readtimeout)
+				)			
 		except requests.exceptions.ConnectionError as e:
-			last_error = 'connectionError %s' % e
+			last_error = zkbException(e, 'requests.ConnectionError tries=%s' % tries)
 			writelog( pid, last_error )
 			continue
 		except requests.exceptions.ConnectTimeout as e:	
-			last_error =  'connectionTimeout %s' % e
+			last_error =  zkbException(e, 'requests.ConnectionTimeout tries=%s' % tries)
 			write_log( pid, last_error )
 			continue
 		except requests.exceptions.ReadTimeout as e:	
-			last_error = 'readTimeout %s' % e
+			last_error = zkbException(e, 'requests.ReadTimeout tries=%s' % tries)
 			writelog( pid, last_error )
 			continue
 		
 		if request.status_code == requests.codes.ok:
 			try:
 				request.json()
-			except ValueError:
-				last_error = 'response not JSON'
+			except ValueError as e:
+				last_error = zkbException(e, 'response not JSON tries=%s' % tries)
 				writelog( pid, last_error )
 				continue
 			break	#if all OK, break out of error checking
 		else:
-			last_error = 'bad status code: %s' % request.status_code
+			last_error = zkbException(request.status_code, 'bad status code tries=%s' % tries)
 			writelog( pid, last_error )
 			continue
 	else:
@@ -209,28 +219,29 @@ def test_killInfo (kill_obj, pid=script_pid, debug=False):
 	kill_info = kill_obj['package']
 	if kill_info == None:
 		writelog(pid, "ERROR: empty response")
-		#raise "empty response"
-		return "empty response"
+		raise zkbException(None, "empty response")
+		#return "empty response"
 	try:	#check that the critical pieces of any kill are in tact
 		killID		= int(kill_obj['package']['killID'])
 		hash 			= kill_info['zkb']['hash']
 		killTime	= kill_info['killmail']['killTime']
 	except KeyError as e:
 		writelog(pid, "ERROR: critical key check failed: %s" % e)
-		#raise e #let main handle final crash/retry logic 	
-		return e #let main handle final crash/retry logic 	
+		raise zkbException(e, "ERROR: critical key check failed")
+		#return e #let main handle final crash/retry logic 	
 	except TypeError as e:
 		writelog(pid, "ERROR: critical key check failed: %s" % e)
-		#raise e #let main handle final crash/retry logic 		
-		return e #let main handle final crash/retry logic 		
+		raise zkbException(e, "ERROR: critical key check failed")
+		#return e #let main handle final crash/retry logic 		
 	if debug: print "%s @ %s" % (killID, killTime)
 		
 	try:
 		killTime_datetime = datetime.strptime(killTime, "%Y.%m.%d %H:%M:%S") #2015.12.06 02:12:30
 	except ValueError as e:
-		writelog(pid, "ERROR: unable to convert `killTime`:%s %s" % (killTime, e))		
+		writelog(pid, "ERROR: unable to convert `killTime`:%s %s" % (killTime, e))	
+		raise zkbException(e, "ERROR: unable to convert `killTime`:%s" % killTime)
 		#raise e #let main handle final crash/retry logic 
-		return e #let main handle final crash/retry logic 
+		#return e #let main handle final crash/retry logic 
 	
 	writelog(pid, "killID: %s PASS: critical key check" % killID)
 	return '' #return empty string
