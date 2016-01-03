@@ -31,6 +31,7 @@ scriptName = "cron_zkb" #used for PID locking
 
 compressed_logging	= int(conf.get('CRON', 'compressed_logging'))
 zkb_exception_limit	= int(conf.get('CRON', 'zkb_exception_limit'))
+zkb_timeout					= int(conf.get('CRON', 'zkb_timeout'))
 redisq_url					= conf.get('CRON', 'zkb_redis_link')
 retry_sleep					= int(conf.get('ZKB', 'default_sleep'))
 script_dir_path = "%s/logs/" % os.path.dirname(os.path.realpath(__file__))
@@ -170,9 +171,10 @@ def fetch_data(pid, debug=False):
 	for tries in range (0,retry_limit):
 		time.sleep(sleep_timer * tries)
 		try:
-			request = requests.post(fetch_url, 
+			request = requests.post(
+				fetch_url, 
 				data=POST_values,
-				timeout=(default_timeout,default_readtimeout)
+				timeout=(default_timeout, zkb_timeout)
 				)			
 		except requests.exceptions.ConnectionError as e:
 			last_error = zkbException(e, 'requests.ConnectionError tries=%s' % tries)
@@ -646,17 +648,17 @@ def main():
 			caught_exception = e
 			
 		try:
-			custom_exception = test_killInfo(kill_data, script_pid, debug)
-			caught_exception = "%s%s" % (caught_exception, custom_exception)
+			test_killInfo(kill_data, script_pid, debug)
+			#caught_exception = "%s%s" % (caught_exception, custom_exception)
 			#TODO: write custom Exception class for critical errors
 		except Exception as e:
 			caught_exception = e
 		
-		process_participants(kill_data, db_partcipants, script_pid, debug)
-		process_fits(kill_data, db_fits, script_pid, debug)
-		process_losses(kill_data, db_losses, script_pid, debug)
-		process_locations(kill_data, db_locations, script_pid, debug)
-		process_crestInfo(kill_data, db_crestInfo, script_pid, debug)
+		#process_participants(kill_data, db_partcipants, script_pid, debug)
+		#process_fits(kill_data, db_fits, script_pid, debug)
+		#process_losses(kill_data, db_losses, script_pid, debug)
+		#process_locations(kill_data, db_locations, script_pid, debug)
+		#process_crestInfo(kill_data, db_crestInfo, script_pid, debug)
 		
 		if caught_exception:	#check to see if parsing should end
 			if kills_processed == 0:
@@ -690,7 +692,12 @@ def main():
 			else:
 				writelog(script_pid, "EXCEPTION FOUND: invalid value for `kills_processed`=%s, exception=%s" % (kills_processed, caught_exception), True)
 			
-		kills_processed += 1 
+		process_participants(kill_data, db_partcipants, script_pid, debug)
+		process_fits(kill_data, db_fits, script_pid, debug)
+		process_losses(kill_data, db_losses, script_pid, debug)
+		process_locations(kill_data, db_locations, script_pid, debug)
+		process_crestInfo(kill_data, db_crestInfo, script_pid, debug)
+		kills_processed += 1
 		##kill_data = fetch_data(script_pid, debug)
 		##empty_check = ""
 		##try:
