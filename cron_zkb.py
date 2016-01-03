@@ -552,7 +552,7 @@ def process_locations(kill_data, dbObj, pid=script_pid, debug=False):
 	
 def process_crestInfo(kill_data, dbObj, pid=script_pid, debug=False):
 	datetime_now = datetime.utcnow()
-	record_processed = datetime_now.strftime("Y-%m-%d %H:%M:%S")
+	record_processed = datetime_now.strftime("%Y-%m-%d %H:%M:%S")
 	try:
 		killID				= int(kill_data['package']['killID'])
 		hash					= 		kill_data['package']['zkb']['hash']
