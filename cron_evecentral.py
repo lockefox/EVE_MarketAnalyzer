@@ -19,7 +19,6 @@ db_cur = None
 #### PROGRAM GLOBALS ####
 itemlist = []
 snapshot_table	= conf.get('TABLES', 'cron_evecentral')
-logfile_name	= conf.get('CRON', 'evecentral_logfile') #add locationID to logfile name
 evecentral_url	= conf.get('CRON', 'evecentral_baseURL')
 fetch_type		= conf.get('CRON', 'evecentral_defaulttype')
 live_table_range= conf.get('CRON', 'live_table_range')

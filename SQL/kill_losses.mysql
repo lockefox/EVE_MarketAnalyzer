@@ -12,5 +12,6 @@ CREATE TABLE `kill_losses` (
 	-- `weaponTypeID` int(8) DEFAULT NULL,
 	`totalValue` decimal(16,2) DEFAULT NULL,
 	`participants` int (8) DEFAULT 1,
+  `locationID` int(8) DEFAULT NULL,
 	PRIMARY KEY(killID,characterID))
 ENGINE=InnoDB DEFAULT CHARSET=latin1

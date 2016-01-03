@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS `kill_value`;
+CREATE TABLE `kill_value`(
+	`killID` int(32) NOT NULL,
+	`totalValue` decimal(16,2) DEFAULT NULL,
+	`destroyedValue` decimal(16,2) DEFAULT NULL,
+	`droppedValue` decimal(16,2) DEFAULT NULL,
+	-- `characterID` int(16) NULL,
+	-- `shipTypeID` int(8) NOT NULL,
+	PRIMARY KEY (killID))
+ENGINE=InnoDB DEFAULT CHARSET=latin1
