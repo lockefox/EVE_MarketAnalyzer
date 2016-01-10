@@ -1,53 +1,5 @@
 {
 	"args": {
-		"prod_export": {
-			"export_import":"export",
-			"tables_to_run": {
-				"crest_markethistory": {
-					"table_name":"crest_markethistory",
-					"ODBC_DSN":"evemarketdata",
-					"create":"crest_markethistory.sqlite",
-					"query":"regionID=10000002",
-					"date_range":400,
-					"sub_date_range":50
-				},
-				"snapshot_evecentral": {
-					"table_name":"snapshot_evecentral",
-					"ODBC_DSN":"remote_ec",
-					"create":"snapshot_evecentral.sqlite",
-					"query":"locationID=30000142",
-					"date_range":90,
-					"sub_date_range":5
-				}
-			},
-			"destination_DSN":"sqlite_connector",
-			"clean_up_READ":0,
-			"clean_up_WRITE":0
-		},
-		"prod_import": {
-			"export_import":"export",
-			"tables_to_run": {
-				"crest_markethistory": {
-					"table_name":"crest_markethistory",
-					"ODBC_DSN":"sqlite_connector",
-					"create":"crest_markethistory.mysql",
-					"query":"regionID=10000002",
-					"date_range":400,
-					"sub_date_range":50
-				},
-				"snapshot_evecentral": {
-					"table_name":"snapshot_evecentral",
-					"ODBC_DSN":"sqlite_connector",
-					"create":"snapshot_evecentral.mysql",
-					"query":"locationID=30000142",
-					"date_range":30,
-					"sub_date_range":2
-				}
-			},
-			"destination_DSN":"evemarketdata",
-			"clean_up_READ":0,
-			"clean_up_WRITE":0
-		},
 		"delete_test": {
 			"export_import":"import",
 			"tables_to_run": {
@@ -114,7 +66,7 @@
 				"snapshot_evecentral": {
 					"table_name":"snapshot_evecentral",
 					"ODBC_DSN":"backup2",
-					"create":"snapshot_evecentral.sql",
+					"create":"snapshot_evecentral.mysql",
 					"query":"locationID IN (30000142,30002053,30002187,30002659)",
 					"date_range":90,
 					"sub_date_range":5
@@ -130,9 +82,9 @@
 				"snapshot_evecentral": {
 					"table_name":"snapshot_evecentral",
 					"ODBC_DSN":"remote_ec",
-					"create":"snapshot_evecentral.sql",
-					"query":"locationID IN (30000142,30002053,30002187,30002659)",
-					"date_range":90,
+					"create":"snapshot_evecentral.mysql",
+					"query":"locationID IN (30000142,30002510,30002053,30002187,30002659)",
+					"date_range":400,
 					"sub_date_range":5
 				}
 			},
@@ -147,7 +99,7 @@
 					"table_name":"snapshot_evecentral",
 					"ODBC_DSN":"remote_ec",
 					"create":"snapshot_evecentral.sqlite",
-					"query":"locationID IN (30000142,30002053,30002187,30002659)",
+					"query":"locationID IN (30000142,30002510,30002053,30002187,30002659)",
 					"date_range":90,
 					"sub_date_range":5
 				},
@@ -205,7 +157,7 @@
 					"create":"snapshot_evecentral.sqlite",
 					"query":"locationID=30000142",
 					"date_range":90,
-					"sub_date_range":5
+					"sub_date_range":15
 				}
 			},
 			"destination_DSN":"sqlite_connector",
