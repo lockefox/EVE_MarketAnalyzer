@@ -29,7 +29,6 @@ tableName_crestInfo			= conf.get('TABLES', 'zkb_crest_info')
 tableName_location			= conf.get('TABLES', 'zkb_location')
 scriptName = "cron_zkb" #used for PID locking
 
-compressed_logging	= int(conf.get('CRON', 'compressed_logging'))
 zkb_exception_limit	= int(conf.get('CRON', 'zkb_exception_limit'))
 zkb_timeout					= int(conf.get('CRON', 'zkb_timeout'))
 redisq_url					= conf.get('CRON', 'zkb_redis_link')
@@ -37,22 +36,6 @@ retry_sleep					= int(conf.get('ZKB', 'default_sleep'))
 script_dir_path = "%s/logs/" % os.path.dirname(os.path.realpath(__file__))
 if not os.path.exists(script_dir_path):
 	os.makedirs(script_dir_path)
-
-#### MAIL STUFF ####
-email_source			= str(conf.get('LOGGING', 'email_source'))
-email_recipients	= str(conf.get('LOGGING', 'email_recipients'))
-email_username		= str(conf.get('LOGGING', 'email_username'))
-email_secret			= str(conf.get('LOGGING', 'email_secret'))
-email_server			= str(conf.get('LOGGING', 'email_server'))
-email_port				= str(conf.get('LOGGING', 'email_port'))
-#Test to see if all email vars are initialized
-#empty str() = False http://stackoverflow.com/questions/9573244/most-elegant-way-to-check-if-the-string-is-empty-in-python
-bool_email_init = ( bool(email_source.strip()) and\
-					bool(email_recipients.strip()) and\
-					bool(email_username.strip()) and\
-					bool(email_secret.strip()) and\
-					bool(email_server.strip()) and\
-					bool(email_port.strip()) )
 
 class zkbException(Exception):
 	def __init__ (self, exception, message):
@@ -84,51 +67,15 @@ class DB_handle (object):
 	def __str__ (self):
 		return self.table_name
 
-def writelog(pid, message, push_email=False):
-	logtime = datetime.utcnow()
-	logtime_str = logtime.strftime('%Y-%m-%d %H:%M:%S')
-	
-	logfile = "%s%s-cron_zkb" % (script_dir_path, pid)
-	log_msg = "%s::%s\n" % (logtime_str,message)
-	if(compressed_logging):
-		with gzip.open("%s.gz" % logfile,'a') as myFile:
-			myFile.write(log_msg)
-	else:
-		with open("%s.log" % logfile,'a') as myFile:
-			myFile.write(log_msg)
-		
-	if(push_email and bool_email_init):	#Bad day case
-		#http://stackoverflow.com/questions/10147455/trying-to-send-email-gmail-as-mail-provider-using-python
-		SUBJECT = '''cron_zkb CRITICAL ERROR - %s''' % pid
-		BODY = message
-		
-		EMAIL = '''\From: {email_source}\nTo: {email_recipients}\nSubject: {SUBJECT}\n\n{BODY}'''
-		EMAIL = EMAIL.format(
-			email_source = email_source,
-			email_recipients = email_recipients,
-			SUBJECT = SUBJECT,
-			BODY = BODY
-			)
-		try:
-			mailserver = smtplib.SMTP(email_server,email_port)
-			mailserver.ehlo()
-			mailserver.starttls()
-			mailserver.login(email_username, email_secret)
-			mailserver.sendmail(email_source, email_recipients.split(', '), EMAIL)
-			mailserver.close()
-			writelog(pid, "SENT email with critical failure to %s" % email_recipients, False)
-		except:
-			writelog(pid, "FAILED TO SEND EMAIL TO %s" % email_recipients, False)
-
 def get_lock(process_name):
 	#Stolen from: http://stackoverflow.com/a/7758075
 	global lock_socket   # Without this our lock gets garbage collected
 	lock_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
 	try:
 		lock_socket.bind('\0' + process_name)
-		writelog(script_pid, "PID-Lock acquired")
+		writelog(script_pid, script_dir_path, scriptName, "PID-Lock acquired")
 	except socket.error:
-		writelog(script_pid, "PID already locked.  Quitting")
+		writelog(script_pid, script_dir_path, scriptName, "PID already locked.  Quitting")
 		sys.exit()
 
 def _initSQL(table_name, pid=script_pid):
@@ -142,12 +89,12 @@ def _initSQL(table_name, pid=script_pid):
 			db     = db_schema)
 		db_cur = db_con.cursor()
 	except OperationalError as e:	#Unable to connect to SQL instance
-		writelog(pid, '%s.%s:\tERROR: %s' % (db_schema, table_name, e[1]), True)
+		writelog(pid, script_dir_path, scriptName, '%s.%s:\tERROR: %s' % (db_schema, table_name, e[1]), True)
 	
 	db_cur.execute('''SHOW TABLES LIKE \'%s\'''' % table_name)
 	db_exists = len(db_cur.fetchall())
 	if db_exists:
-		writelog(pid, '%s.%s:\tGOOD' % (db_schema,table_name))
+		writelog(pid, script_dir_path, scriptName, '%s.%s:\tGOOD' % (db_schema,table_name))
 	else:	#TODO: add override command to avoid 'drop table' command 
 		table_init = open(path.relpath('SQL/%s.mysql' % table_name) ).read()
 		table_init_commands = table_init.split(';')
@@ -156,9 +103,9 @@ def _initSQL(table_name, pid=script_pid):
 				db_cur.execute(command)
 				db_con.commit()
 		except Exception as e: #Unable to create desired table
-			writelog(pid, '%s.%s:\tERROR: %s' % (db_schema, table_name, e[1]), True)
+			writelog(pid, script_dir_path, scriptName, '%s.%s:\tERROR: %s' % (db_schema, table_name, e[1]), True)
 			sys.exit(2)
-		writelog(pid, '%s.%s:\tCREATED' % (db_schema, table_name))
+		writelog(pid, script_dir_path, scriptName, '%s.%s:\tCREATED' % (db_schema, table_name))
 	db_cur.execute('''SHOW COLUMNS FROM `%s`''' % table_name)
 	raw_headers = db_cur.fetchall()
 	tmp_headers = []
@@ -186,7 +133,7 @@ def fetch_data(pid, debug=False):
 				)			
 		except requests.exceptions.ConnectionError as e:
 			last_error = zkbException(e, 'requests.ConnectionError tries=%s' % tries)
-			writelog( pid, last_error )
+			writelog(pid, script_dir_path, scriptName, last_error )
 			continue
 		except requests.exceptions.ConnectTimeout as e:	
 			last_error =  zkbException(e, 'requests.ConnectionTimeout tries=%s' % tries)
@@ -194,7 +141,7 @@ def fetch_data(pid, debug=False):
 			continue
 		except requests.exceptions.ReadTimeout as e:	
 			last_error = zkbException(e, 'requests.ReadTimeout tries=%s' % tries)
-			writelog( pid, last_error )
+			writelog(pid, script_dir_path, scriptName, last_error )
 			continue
 		
 		if request.status_code == requests.codes.ok:
@@ -202,7 +149,7 @@ def fetch_data(pid, debug=False):
 				request.json()
 			except ValueError as e:
 				last_error = zkbException(e, 'response not JSON tries=%s' % tries)
-				writelog( pid, last_error )
+				writelog(pid, script_dir_path, scriptName, last_error )
 				continue
 			break	#if all OK, break out of error checking
 		else:
@@ -220,7 +167,7 @@ def fetch_data(pid, debug=False):
 	##		fetch_url  = fetch_url,
 	##		last_error = last_error
 	##		)
-	##	writelog(pid, error_msg, True)
+	##	writelog(pid, script_dir_path, scriptName, error_msg, True)
 	##	sys.exit(0)
 	return request.json()
 
@@ -228,7 +175,7 @@ def test_killInfo (kill_obj, pid=script_pid, debug=False):
 	#if debug: print "save_killInfo()"
 	kill_info = kill_obj['package']
 	if kill_info == None:
-		writelog(pid, "ERROR: empty response")
+		writelog(pid, script_dir_path, scriptName, "ERROR: empty response")
 		raise zkbException(None, "empty response")
 		#return "empty response"
 	try:	#check that the critical pieces of any kill are in tact
@@ -236,11 +183,11 @@ def test_killInfo (kill_obj, pid=script_pid, debug=False):
 		hash 			= kill_info['zkb']['hash']
 		killTime	= kill_info['killmail']['killTime']
 	except KeyError as e:
-		writelog(pid, "ERROR: critical key check failed: %s" % e)
+		writelog(pid, script_dir_path, scriptName, "ERROR: critical key check failed: %s" % e)
 		raise zkbException(e, "ERROR: critical key check failed")
 		#return e #let main handle final crash/retry logic 	
 	except TypeError as e:
-		writelog(pid, "ERROR: critical key check failed: %s" % e)
+		writelog(pid, script_dir_path, scriptName, "ERROR: critical key check failed: %s" % e)
 		raise zkbException(e, "ERROR: critical key check failed")
 		#return e #let main handle final crash/retry logic 		
 	if debug: print "%s @ %s" % (killID, killTime)
@@ -248,12 +195,12 @@ def test_killInfo (kill_obj, pid=script_pid, debug=False):
 	try:
 		killTime_datetime = datetime.strptime(killTime, "%Y.%m.%d %H:%M:%S") #2015.12.06 02:12:30
 	except ValueError as e:
-		writelog(pid, "ERROR: unable to convert `killTime`:%s %s" % (killTime, e))	
+		writelog(pid, script_dir_path, scriptName, "ERROR: unable to convert `killTime`:%s %s" % (killTime, e))	
 		raise zkbException(e, "ERROR: unable to convert `killTime`:%s" % killTime)
 		#raise e #let main handle final crash/retry logic 
 		#return e #let main handle final crash/retry logic 
 	
-	writelog(pid, "killID: %s PASS: critical key check" % killID)
+	writelog(pid, script_dir_path, scriptName, "killID: %s PASS: critical key check" % killID)
 	return '' #return empty string
 
 def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
@@ -267,10 +214,10 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		killTime = killTime_datetime.strftime("%Y-%m-%d %H:%M:%S")
 	except KeyError as e:
 		raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
-		writelog(pid, "JSON error %s: %s" % (e,raw_json), True)
+		writelog(pid, script_dir_path, scriptName, "JSON error %s: %s" % (e,raw_json), True)
 	except TypeError as e:	#TODO: nasty crash error should be handled by test_killInfo()
 		raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
-		writelog(pid, "JSON error %s: %s" % (e,raw_json), True)
+		writelog(pid, script_dir_path, scriptName, "JSON error %s: %s" % (e,raw_json), True)
 	## Victim Info
 	isVictim = 1
 	try:
@@ -284,7 +231,7 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		corporationID	= int(kill_data['package']['killmail']['victim']['corporation']['id'])
 	except Exception as e:
 		raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
-		writelog(pid, "JSON error %s: %s" % (e,raw_json), True)
+		writelog(pid, script_dir_path, scriptName, "JSON error %s: %s" % (e,raw_json), True)
 	try:
 		allianceID = int(kill_data['package']['killmail']['victim']['alliance']['id'])
 	except KeyError as e:
@@ -348,7 +295,7 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		except Exception as e:
 			raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
 			raw_attackers = json.dumps(attackerObj, sort_keys=True, indent=4, separators=(',', ': '))
-			writelog(pid, "JSON error %s: %s\n%s" % (e,raw_json,raw_attackers), True)
+			writelog(pid, script_dir_path, scriptName, "JSON error %s: %s\n%s" % (e,raw_json,raw_attackers), True)
 		try:
 			allianceID = int(attackerObj['alliance']['id'])
 		except KeyError as e:
@@ -378,7 +325,7 @@ def process_participants(kill_data, dbObj, pid=script_pid, debug=False):
 		commit_str = "%s, %s" % (commit_str, attackerInfo)
 	
 	writeSQL(commit_str, dbObj, script_pid, debug)
-	writelog(pid, "killID: %s -- Participants written" % killID)
+	writelog(pid, script_dir_path, scriptName, "killID: %s -- Participants written" % killID)
 	
 def process_fits(kill_data, dbObj, pid=script_pid, debug=False):
 	try:
@@ -386,7 +333,7 @@ def process_fits(kill_data, dbObj, pid=script_pid, debug=False):
 		shipTypeID		= int(kill_data['package']['killmail']['victim']['shipType']['id'])
 	except KeyError as e:
 		raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
-		writelog(pid, "JSON error %s: %s" % (e,raw_json), True)
+		writelog(pid, script_dir_path, scriptName, "JSON error %s: %s" % (e,raw_json), True)
 	base_commit_str = '''INSERT IGNORE INTO {table_name} ({table_headers}) VALUES'''
 	base_commit_str = base_commit_str.format(
 		table_name 		= dbObj.table_name,
@@ -417,7 +364,7 @@ def process_fits(kill_data, dbObj, pid=script_pid, debug=False):
 		except KeyError as e:
 			raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
 			raw_items = json.dumps(itemObj, sort_keys=True, indent=4, separators=(',', ': '))
-			writelog(pid, "JSON error %s: %s\n%s" % (e,raw_json,raw_attackers), True)
+			writelog(pid, script_dir_path, scriptName, "JSON error %s: %s\n%s" % (e,raw_json,raw_attackers), True)
 		try:
 			qtyDropped	= int(itemObj['quantityDropped'])
 		except KeyError as e:
@@ -440,7 +387,7 @@ def process_fits(kill_data, dbObj, pid=script_pid, debug=False):
 			)
 		commit_str = "%s, %s" % (commit_str, itemInfo)
 	writeSQL(commit_str, dbObj, script_pid, debug)
-	writelog(pid, "killID: %s -- Fits written" % killID)
+	writelog(pid, script_dir_path, scriptName, "killID: %s -- Fits written" % killID)
 	
 def process_losses(kill_data, dbObj, pid=script_pid, debug=False):
 	try:
@@ -454,7 +401,7 @@ def process_losses(kill_data, dbObj, pid=script_pid, debug=False):
 		corporationID	= int(kill_data['package']['killmail']['victim']['corporation']['id'])
 	except KeyError as e:
 		raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
-		writelog(pid, "JSON error %s: %s" % (e,raw_json), True)	
+		writelog(pid, script_dir_path, scriptName, "JSON error %s: %s" % (e,raw_json), True)	
 	try:
 		characterID		= int(kill_data['package']['killmail']['victim']['character']['id'])
 	except KeyError as e:
@@ -505,14 +452,14 @@ def process_losses(kill_data, dbObj, pid=script_pid, debug=False):
 		lossesInfo			= lossesInfo
 		)
 	writeSQL(commit_str, dbObj, script_pid, debug)
-	writelog(pid, "killID: %s -- Losses written" % killID)
+	writelog(pid, script_dir_path, scriptName, "killID: %s -- Losses written" % killID)
 	
 def process_locations(kill_data, dbObj, pid=script_pid, debug=False):
 	try:
 		killID 				= int(kill_data['package']['killID'])	
 	except KeyError as e:
 		raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
-		writelog(pid, "JSON error %s: %s" % (e,raw_json), True)	
+		writelog(pid, script_dir_path, scriptName, "JSON error %s: %s" % (e,raw_json), True)	
 	try:
 		locationID = int(kill_data['package']['zkb']['locationID'])
 	except KeyError as e:
@@ -548,7 +495,7 @@ def process_locations(kill_data, dbObj, pid=script_pid, debug=False):
 		)
 	
 	writeSQL(commit_str, dbObj, script_pid, debug)
-	writelog(pid, "killID: %s -- Locations written" % killID)
+	writelog(pid, script_dir_path, scriptName, "killID: %s -- Locations written" % killID)
 	
 def process_crestInfo(kill_data, dbObj, pid=script_pid, debug=False):
 	datetime_now = datetime.utcnow()
@@ -561,7 +508,7 @@ def process_crestInfo(kill_data, dbObj, pid=script_pid, debug=False):
 		killTime = killTime_datetime.strftime("%Y-%m-%d %H:%M:%S")
 	except KeyError as e:
 		raw_json = json.dumps(kill_data, sort_keys=True, indent=4, separators=(',', ': '))
-		writelog(pid, "JSON error %s: %s" % (e,raw_json), True)	
+		writelog(pid, script_dir_path, scriptName, "JSON error %s: %s" % (e,raw_json), True)	
 		
 	base_commit_str = '''INSERT IGNORE INTO {table_name} ({table_headers}) VALUES'''
 	base_commit_str = base_commit_str.format(
@@ -583,7 +530,7 @@ def process_crestInfo(kill_data, dbObj, pid=script_pid, debug=False):
 		crestInfo				= crestInfo
 		)
 	writeSQL(commit_str, dbObj, script_pid, debug)
-	writelog(pid, "killID: %s -- crestInfo written" % killID)
+	writelog(pid, script_dir_path, scriptName, "killID: %s -- crestInfo written" % killID)
 
 def writeSQL(commit_str, dbObj, pid=script_pid, debug=False):
 	#if debug: print "%s: %s" % (dbObj, commit_str)
@@ -598,7 +545,7 @@ def writeSQL(commit_str, dbObj, pid=script_pid, debug=False):
 			exception_val = e[1],
 			commit_str = commit_str
 			)
-		writelog(pid, error_str, True)
+		writelog(pid, script_dir_path, scriptName, error_str, True)
 		sys.exit(2)
 		
 def main():
@@ -616,7 +563,7 @@ def main():
 	for opt, arg in opts:
 		if opt == '--cleanup':
 			table_cleanup = True
-			writelog(script_pid, "Executing table cleanup" % snapshot_table)
+			writelog(script_pid, script_dir_path, scriptName, "Executing table cleanup" % snapshot_table)
 		elif opt == "--debug":
 			debug = True
 		else:
@@ -681,14 +628,14 @@ def main():
 						fail_count = fail_count,
 						caught_exception = caught_exception
 						)
-					writelog(script_pid, error_msg, True)
+					writelog(script_pid, script_dir_path, scriptName, error_msg, True)
 					
-				writelog(script_pid, "EXCEPTION FOUND: but kills_processed = %s, retry case: %s" % (kills_processed,caught_exception))
+				writelog(script_pid, script_dir_path, scriptName, "EXCEPTION FOUND: but kills_processed = %s, retry case: %s" % (kills_processed,caught_exception))
 				#kills_processed += 1
 				fail_count += 1 
 				continue
 			elif kills_processed > 0:
-				writelog(script_pid, "EXCEPTION FOUND: kills_processed = %s, sleep case %s" % (kills_processed,caught_exception))
+				writelog(script_pid, script_dir_path, scriptName, "EXCEPTION FOUND: kills_processed = %s, sleep case %s" % (kills_processed,caught_exception))
 			#Clean up connections#
 				db_partcipants.db_con.close()
 				db_fits.db_con.close()
@@ -698,7 +645,7 @@ def main():
 			#quit normally#
 				sys.exit(0)
 			else:
-				writelog(script_pid, "EXCEPTION FOUND: invalid value for `kills_processed`=%s, exception=%s" % (kills_processed, caught_exception), True)
+				writelog(script_pid, script_dir_path, scriptName, "EXCEPTION FOUND: invalid value for `kills_processed`=%s, exception=%s" % (kills_processed, caught_exception), True)
 			
 		process_participants(kill_data, db_partcipants, script_pid, debug)
 		process_fits(kill_data, db_fits, script_pid, debug)
@@ -714,12 +661,12 @@ def main():
 		##	print "not 'null'"
 		##if empty_check == 'null':	#TODO: reverse logic?
 		##	if kills_processed > 0:
-		##		writelog(pid, "Kill processing complete: kills processed=%s" % kills_processed)
+		##		writelog(pid, script_dir_path, scriptName, "Kill processing complete: kills processed=%s" % kills_processed)
 		##	elif kills_processed == 0:
-		##		writelog(pid, "Blank returned as first query.  Retrying")
+		##		writelog(pid, script_dir_path, scriptName, "Blank returned as first query.  Retrying")
 		##	else:
 		##		if debug: print "invalid value for `kills_processed`=%s" % kills_processed
-		##		writelog(pid, "invalid value for `kills_processed`=%s" % kills_processed, True)
+		##		writelog(pid, script_dir_path, scriptName, "invalid value for `kills_processed`=%s" % kills_processed, True)
 		##
 		##kills_processed += 1
 		##if debug: print kill_data['package']['killID']

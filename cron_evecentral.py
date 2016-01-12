@@ -27,26 +27,11 @@ start_datetime	= datetime.utcnow()
 commit_date		= start_datetime.strftime('%Y-%m-%d')
 commit_time		= start_datetime.strftime('%H:%M:%S')
 default_locationid = int(conf.get('CRON', 'evecentral_defaultlocationid'))
-compressed_logging = int(conf.get('CRON', 'compressed_logging'))
+
 script_dir_path = "%s/logs/" % os.path.dirname(os.path.realpath(__file__))
 if not os.path.exists(script_dir_path):
 	os.makedirs(script_dir_path)
-#### MAIL STUFF ####
-email_source		= str(conf.get('LOGGING', 'email_source'))
-email_recipients	= str(conf.get('LOGGING', 'email_recipients'))
-email_username		= str(conf.get('LOGGING', 'email_username'))
-email_secret		= str(conf.get('LOGGING', 'email_secret'))
-email_server		= str(conf.get('LOGGING', 'email_server'))
-email_port			= str(conf.get('LOGGING', 'email_port'))
-
-#Test to see if all email vars are initialized
-#empty str() = False http://stackoverflow.com/questions/9573244/most-elegant-way-to-check-if-the-string-is-empty-in-python
-bool_email_init = ( bool(email_source.strip()) and\
-					bool(email_recipients.strip()) and\
-					bool(email_username.strip()) and\
-					bool(email_secret.strip()) and\
-					bool(email_server.strip()) and\
-					bool(email_port.strip()) )
+scriptName = "cron_evecentral" 
 
 def thread_print(msg):
 	sys.stdout.write("%s\n" % msg)
@@ -99,42 +84,6 @@ def fetch_typeIDs():
 	for row in raw_values:
 		return_list.append(int(row[0]))
 	return return_list
-	
-def writelog(locationID, message, push_email=False):
-	logtime = datetime.utcnow()
-	logtime_str = logtime.strftime('%Y-%m-%d %H:%M:%S')
-	
-	logfile = "%s%s-cron_evecentral" % (script_dir_path, locationID)
-	log_msg = "%s::%s\n" % (logtime_str,message)
-	if(compressed_logging):
-		with gzip.open("%s.gz" % logfile,'a') as myFile:
-			myFile.write(log_msg)
-	else:
-		with open("%s.log" % logfile,'a') as myFile:
-			myFile.write(log_msg)
-		
-	if(push_email and bool_email_init):	#Bad day case
-		#http://stackoverflow.com/questions/10147455/trying-to-send-email-gmail-as-mail-provider-using-python
-		SUBJECT = '''cron_evecentral CRITICAL ERROR - %s''' % locationID
-		BODY = message
-		
-		EMAIL = '''\From: {email_source}\nTo: {email_recipients}\nSubject: {SUBJECT}\n\n{BODY}'''
-		EMAIL = EMAIL.format(
-			email_source = email_source,
-			email_recipients = email_recipients,
-			SUBJECT = SUBJECT,
-			BODY = BODY
-			)
-		try:
-			mailserver = smtplib.SMTP(email_server,email_port)
-			mailserver.ehlo()
-			mailserver.starttls()
-			mailserver.login(email_username, email_secret)
-			mailserver.sendmail(email_source, email_recipients.split(', '), EMAIL)
-			mailserver.close()
-			writelog(locationID, "SENT email with critical failure to %s" % email_recipients, False)
-		except:
-			writelog(locationID, "FAILED TO SEND EMAIL TO %s" % email_recipients, False)
 
 def _initSQL(table_name, locationID):
 	global db_con, db_cur
@@ -149,7 +98,7 @@ def _initSQL(table_name, locationID):
 	db_cur.execute('''SHOW TABLES LIKE \'%s\'''' % table_name)
 	db_exists = len(db_cur.fetchall())
 	if db_exists:
-		writelog(locationID, '%s.%s:\tGOOD' % (db_schema,table_name))
+		writelog(locationID, script_dir_path, scriptName, '%s.%s:\tGOOD' % (db_schema,table_name))
 	else:	#TODO: add override command to avoid 'drop table' command 
 		table_init = open(path.relpath('SQL/%s.mysql' % table_name) ).read()
 		table_init_commands = table_init.split(';')
@@ -159,9 +108,9 @@ def _initSQL(table_name, locationID):
 				db_con.commit()
 		except Exception as e:
 			#TODO: push critical errors to email log (SQL error)
-			writelog(locationID, '%s.%s:\tERROR: %s' % (db_schema, table_name, e[1]), True)
+			writelog(locationID, script_dir_path, scriptName, '%s.%s:\tERROR: %s' % (db_schema, table_name, e[1]), True)
 			sys.exit(2)
-		writelog(locationID, '%s.%s:\tCREATED' % (db_schema, table_name))
+		writelog(locationID, script_dir_path, scriptName, '%s.%s:\tCREATED' % (db_schema, table_name))
 	db_cur.execute('''SHOW COLUMNS FROM `%s`''' % table_name)
 	raw_headers = db_cur.fetchall()
 	tmp_headers = []
@@ -193,15 +142,15 @@ def fetch_data(itemlist, locationID, debug=False):
 				timeout=(default_timeout,default_readtimeout))			
 		except requests.exceptions.ConnectionError as e:
 			last_error = 'connectionError %s' % e
-			writelog( locationID, last_error )
+			writelog(locationID, script_dir_path, scriptName, last_error )
 			continue
 		except requests.exceptions.ConnectTimeout as e:	
 			last_error =  'connectionTimeout %s' % e
-			writelog( locationID, last_error )
+			writelog(locationID, script_dir_path, scriptName, last_error )
 			continue
 		except requests.exceptions.ReadTimeout as e:	
 			last_error = 'readTimeout %s' % e
-			writelog( locationID, last_error )
+			writelog(locationID, script_dir_path, scriptName, last_error )
 			continue
 		
 		if request.status_code == requests.codes.ok:
@@ -209,12 +158,12 @@ def fetch_data(itemlist, locationID, debug=False):
 				request.json()
 			except ValueError:
 				last_error = 'response not JSON'
-				writelog( locationID, last_error )
+				writelog(locationID, script_dir_path, scriptName, last_error )
 				continue
 			break	#if all OK, break out of error checking
 		else:
 			last_error = 'bad status code: %s' % request.status_code
-			writelog( locationID, last_error )
+			writelog(locationID, script_dir_path, scriptName, last_error )
 			continue
 	else:
 		error_msg = '''ERROR: unhandled exception fetching from EC
@@ -229,7 +178,7 @@ def fetch_data(itemlist, locationID, debug=False):
 			itemid_str = itemid_str,
 			last_error = last_error
 			)
-		writelog(locationID, error_msg, True)
+		writelog(locationID, script_dir_path, scriptName, error_msg, True)
 		sys.exit(0)
 		#TODO: push critical error to email log (connection error)
 	return request.json()
@@ -277,7 +226,7 @@ def writeSQL(JSON_obj, locationID, debug=False):
 			exception_val = e[1],
 			insert_statement = insert_statement
 			)
-		writelog(locationID, error_str, True)
+		writelog(locationID, script_dir_path, scriptName, error_str, True)
 		sys.exit(2)
 
 def integrity_check(locationID, debug=False):
@@ -392,10 +341,10 @@ def main():
 			locationID = arg
 		elif opt == '--optimize_table':
 			table_cleanup = True
-			writelog(locationID, "Executing table cleanup" % snapshot_table)
+			writelog(locationID, script_dir_path, scriptName, "Executing table cleanup" % snapshot_table)
 		elif opt == '--table_override':
 			snapshot_table = arg
-			writelog(locationID, "write table changed to: `%s`" % snapshot_table)
+			writelog(locationID, script_dir_path, scriptName, "write table changed to: `%s`" % snapshot_table)
 		else:
 			assert False
 
@@ -409,26 +358,26 @@ def main():
 	for itemid in item_list:
 		sub_list.append(itemid)
 		if len(sub_list) >= request_limit:
-			writelog(locationID, "fetching list STEP: %s" % (step_count))
+			writelog(locationID, script_dir_path, scriptName, "fetching list STEP: %s" % (step_count))
 			return_JSON = fetch_data(sub_list, locationID)
-			writelog(locationID, "fetching list: SUCCESS")
+			writelog(locationID, script_dir_path, scriptName, "fetching list: SUCCESS")
 			writeSQL(return_JSON, locationID)
-			writelog(locationID, "writing list to DB: SUCCESS")
+			writelog(locationID, script_dir_path, scriptName, "writing list to DB: SUCCESS")
 			sub_list = []
 			step_count += 1
 	if len(sub_list) > 0:
-		writelog(locationID, "fetching list STEP: %s" % (step_count))
+		writelog(locationID, script_dir_path, scriptName, "fetching list STEP: %s" % (step_count))
 		return_JSON = fetch_data(sub_list, locationID)
-		writelog(locationID, "fetching list: SUCCESS")
+		writelog(locationID, script_dir_path, scriptName, "fetching list: SUCCESS")
 		writeSQL(return_JSON, locationID)
-		writelog(locationID, "writing list to DB: SUCCESS")
+		writelog(locationID, script_dir_path, scriptName, "writing list to DB: SUCCESS")
 		step_count += 1 
 	integrity_check(locationID)
-	writelog(locationID, "integrity_check() passed", False)
+	writelog(locationID, script_dir_path, scriptName, "integrity_check() passed", False)
 	
 	if table_cleanup: 
 		cleanup_tables(locationID)
-		writelog(locationID, "cleanup_tables() passed", False)
+		writelog(locationID, script_dir_path, scriptName, "cleanup_tables() passed", False)
 
 if __name__ == "__main__":
 	try:

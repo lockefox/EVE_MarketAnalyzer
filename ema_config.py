@@ -2,7 +2,7 @@ import ConfigParser
 import pypyodbc
 import sys
 from os import environ, path, getcwd
-from datetime import timedelta
+from datetime import timedelta, datetime
 import itertools
 flatten = itertools.chain.from_iterable
 
@@ -57,6 +57,58 @@ def sanitize(filename):
 		return c if (c.isalnum() or c in (' ','.','-')) else ''
 	return "".join(keep(c) for c in filename).strip()
 
+#### MAIL STUFF ####
+compressed_logging = int(conf.get('CRON', 'compressed_logging'))
+email_source			= str(conf.get('LOGGING', 'email_source'))
+email_recipients	= str(conf.get('LOGGING', 'email_recipients'))
+email_username		= str(conf.get('LOGGING', 'email_username'))
+email_secret			= str(conf.get('LOGGING', 'email_secret'))
+email_server			= str(conf.get('LOGGING', 'email_server'))
+email_port				= str(conf.get('LOGGING', 'email_port'))
+#Test to see if all email vars are initialized
+#empty str() = False http://stackoverflow.com/questions/9573244/most-elegant-way-to-check-if-the-string-is-empty-in-python
+bool_email_init = ( bool(email_source.strip()) and\
+					bool(email_recipients.strip()) and\
+					bool(email_username.strip()) and\
+					bool(email_secret.strip()) and\
+					bool(email_server.strip()) and\
+					bool(email_port.strip()) )
+def writelog(uniqueID, path, script, message, push_email=False):
+	logtime = datetime.utcnow()
+	logtime_str = logtime.strftime('%Y-%m-%d %H:%M:%S')
+	
+	logfile = "%s%s-%s" % (path, uniqueID, script)
+	log_msg = "%s::%s\n" % (logtime_str,message)
+	if(compressed_logging):
+		with gzip.open("%s.gz" % logfile,'a') as myFile:
+			myFile.write(log_msg)
+	else:
+		with open("%s.log" % logfile,'a') as myFile:
+			myFile.write(log_msg)
+		
+	if(push_email and bool_email_init):	#Bad day case
+		#http://stackoverflow.com/questions/10147455/trying-to-send-email-gmail-as-mail-provider-using-python
+		SUBJECT = '''cron_zkb CRITICAL ERROR - %s''' % uniqueID
+		BODY = message
+		
+		EMAIL = '''\From: {email_source}\nTo: {email_recipients}\nSubject: {SUBJECT}\n\n{BODY}'''
+		EMAIL = EMAIL.format(
+			email_source = email_source,
+			email_recipients = email_recipients,
+			SUBJECT = SUBJECT,
+			BODY = BODY
+			)
+		try:
+			mailserver = smtplib.SMTP(email_server,email_port)
+			mailserver.ehlo()
+			mailserver.starttls()
+			mailserver.login(email_username, email_secret)
+			mailserver.sendmail(email_source, email_recipients.split(', '), EMAIL)
+			mailserver.close()
+			writelog(uniqueID, "SENT email with critical failure to %s" % email_recipients, False)
+		except:
+			writelog(uniqueID, "FAILED TO SEND EMAIL TO %s" % email_recipients, False)
+	
 ####CONST STUFF####
 region_list = {
 	'10000001':'Derelik',
