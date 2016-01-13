@@ -15,6 +15,10 @@ from ema_config import *
 thread_exit_flag = False
 
 gDebug = False
+gLogID = ''
+scriptName = "cron_eveapi"
+
+script_dir_path = "%s/logs/" % os.path.dirname(os.path.realpath(__file__))
 
 class DB_handle (object):
 	#Designed to hold SQL connection info
@@ -59,8 +63,12 @@ def main():
 			assert False
 			
 	if run_all_queries:
+		writelog(gLogID, script_dir_path, "run_all_queries enabled")
 		run_pcu = True
+		#TODO: for more feeds, add True force here
 		
+	
+	
 if __name__ == "__main__":
 	try:
 		main()
