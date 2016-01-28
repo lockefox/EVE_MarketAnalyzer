@@ -2,6 +2,7 @@ DROP TABLE IF EXISTS `eveapi_pcu`;
 CREATE TABLE `eveapi_pcu` (
   `record_datetime`  datetime    NOT NULL,
   `onlinePlayers`  int(8)  NOT NULL,
+  `serverOpen`  tinyint(1) DEFAULT TRUE,
   PRIMARY KEY (record_datetime))
 ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
