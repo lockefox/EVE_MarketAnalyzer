@@ -1,0 +1,8 @@
+DROP TABLE IF EXISTS `eveapi_mapJumps`;
+CREATE TABLE `eveapi_mapJumps` (
+  `record_datetime`  datetime    NOT NULL,
+  `solarSystemID`  int(8)  NOT NULL,
+  `shipJumps` int(8) NOT NULL,  -- /map/jumps
+  PRIMARY KEY (record_datetime, solarSystemID))
+ENGINE=InnoDB DEFAULT CHARSET=latin1;
+

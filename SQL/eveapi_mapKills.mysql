@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS `eveapi_mapKills`;
+CREATE TABLE `eveapi_mapKills` (
+  `record_datetime`  datetime    NOT NULL,
+  `solarSystemID`  int(8)  NOT NULL,
+  `shipKills` int(8) NOT NULL,  -- /map/kills
+  `NPCKills` int(8) NOT NULL,   -- /map/kills
+  `podKills` int(8) NOT NULL,   -- /map/kills
+  PRIMARY KEY (record_datetime, solarSystemID))
+ENGINE=InnoDB DEFAULT CHARSET=latin1;
+

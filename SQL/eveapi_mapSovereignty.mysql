@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS `eveapi_mapSovereignty`;
+CREATE TABLE `eveapi_mapSovereignty` (
+  `record_datetime`  datetime    NOT NULL,
+  `solarSystemID`  int(8)  NOT NULL,
+  `allianceID` int(8) DEFAULT NULL,     -- /map/Sovereignty
+  `corporationID` int(8) DEFAULT NULL,  -- /map/Sovereignty
+  PRIMARY KEY (record_datetime, solarSystemID))
+ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
