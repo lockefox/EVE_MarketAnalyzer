@@ -115,7 +115,7 @@
 					"table_name":"snapshot_evecentral",
 					"ODBC_DSN":"backup2",
 					"create":"snapshot_evecentral.sql",
-					"query":"locationID IN (30000142,30002053,30002187,30002659)",
+					"query":"locationID IN (30000142,30002510,30002187,30002659)",
 					"date_range":90,
 					"sub_date_range":5
 				}
@@ -129,9 +129,9 @@
 			"tables_to_run": {
 				"snapshot_evecentral": {
 					"table_name":"snapshot_evecentral",
-					"ODBC_DSN":"remote_ec",
+					"ODBC_DSN":"remote_ec_alt",
 					"create":"snapshot_evecentral.sql",
-					"query":"locationID IN (30000142,30002053,30002187,30002659)",
+					"query":"locationID IN (30000142,30002510,30002187,30002659)",
 					"date_range":90,
 					"sub_date_range":5
 				}
@@ -147,7 +147,7 @@
 					"table_name":"snapshot_evecentral",
 					"ODBC_DSN":"remote_ec",
 					"create":"snapshot_evecentral.sqlite",
-					"query":"locationID IN (30000142,30002053,30002187,30002659)",
+					"query":"locationID IN (30000142,30002510,30002187,30002659)",
 					"date_range":90,
 					"sub_date_range":5
 				},

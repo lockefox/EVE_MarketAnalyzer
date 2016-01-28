@@ -89,7 +89,10 @@ def test_connection ( odbc_dsn, table_name, table_create_file, debug=gDebug ):
 	except Exception as e:
 		writelog( "***ERROR: unable to connect to DSN=%s: %s" % ( odbc_dsn, e ), True )
 		sys.exit(2)
-	
+	None
+	#time.sleep(0.1)
+	#else:
+	#	if debug: print "\t odbc connection for %s success" % odbc_dsn
 	test_query = '''SELECT * FROM {table_name} LIMIT 1'''
 	test_query = test_query.format( table_name = table_name )	
 	if debug: print "\t%s" % test_query
@@ -106,7 +109,7 @@ def test_connection ( odbc_dsn, table_name, table_create_file, debug=gDebug ):
 				writelog( "***ERROR: unable to create table %s.%s %s" % ( odbc_dsn, table_name, err), True )
 				sys.exit(2)
 		else:
-			writelog( "\tNo table_create_file given, exiting", True )
+			writelog( "\tNo table_create_file given, exiting: %s" % e, True )
 			sys.exit(2)
 	db_con.close()
 	writelog( "\t%s.%s READY" % ( odbc_dsn, table_name ) )
