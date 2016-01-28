@@ -1,7 +1,7 @@
 DROP TABLE IF EXISTS `eveapi_mapstats`;
 CREATE TABLE `eveapi_mapstats` (
-	`record_datetime`	datetime		NOT NULL,
-	`solarSystemID`	int(8)	NOT NULL,
+  `record_datetime`  datetime    NOT NULL,
+  `solarSystemID`  int(8)  NOT NULL,
   `shipKills` int(8) NOT NULL,                  -- /map/kills
   `NPCKills` int(8) NOT NULL,                   -- /map/kills
   `podKills` int(8) NOT NULL,                   -- /map/kills
@@ -13,6 +13,6 @@ CREATE TABLE `eveapi_mapstats` (
   `victoryPointThreshold` int(8) DEFAULT NULL,  -- /map/FacWarSystems
   `allianceID` int(8) DEFAULT NULL,             -- /map/Sovereignty
   `corporationID` int(8) DEFAULT NULL,          -- /map/Sovereignty
-	PRIMARY KEY (record_datetime, solarSystemID))
+  PRIMARY KEY (record_datetime, solarSystemID))
 ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
