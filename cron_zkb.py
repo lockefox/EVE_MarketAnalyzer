@@ -11,6 +11,7 @@ import threading
 import smtplib	#for emailing logs 
 
 from ema_config import *
+from eveapi import eveapi
 thread_exit_flag = False
 
 db_partcipants	= None
@@ -37,6 +38,8 @@ retry_sleep					= int(conf.get('ZKB', 'default_sleep'))
 script_dir_path = "%s/logs/" % os.path.dirname(os.path.realpath(__file__))
 if not os.path.exists(script_dir_path):
 	os.makedirs(script_dir_path)
+
+min_onlinePlayers = int(conf.get('CRON', 'eveapi_min_onlinePlayers'))
 
 #### MAIL STUFF ####
 email_source			= str(conf.get('LOGGING', 'email_source'))
@@ -84,6 +87,66 @@ class DB_handle (object):
 	def __str__ (self):
 		return self.table_name
 
+class API_status(object):
+	def __init__ (self, log_pid):
+		self.tranquility_tested = False
+		self.tranquility_status = False
+		self.tranquility_status_message = ""
+		self.CREST_status = False
+		self.CREST_status_message = ""
+		self.zkb_status = False
+		self.zkb_status_message = ""
+		self.log_pid = log_pid
+	
+	def connectionsGood(self):
+		return_bool = True
+		return_bool = self.tranquility_status and /
+									self.CREST_status and /
+									self.zkb_status
+		return return_bool
+	
+	def testConnections(self, test_tranquility=True, test_CREST=True, test_zkb=True):
+		None
+		
+	def tranquilityStatus(self):
+		bool_tranquility_status = True
+		eveapi_handle = eveapi.EVEAPIConnection()
+		try:
+			server_api_obj = eveapi_handle.eve.ServerStatus()
+		except eveapi.Error as e:
+			bool_test_tranquility = False
+			self.tranquility_status = bool_test_tranquility
+			self.tranquility_status_message = "EXCEPTION--EVEAPI setup: %s.%s" % (e.code, e.message)
+			#TODO: LOG EXCEPTION
+			return bool_test_tranquility
+		except Exception as e:
+			bool_test_tranquility = False
+			self.tranquility_status = bool_test_tranquility
+			self.tranquility_status_message = "EXCEPTION--EVEAPI General: %s" % e
+			#TODO: LOG EXCEPTION
+			return bool_test_tranquility
+		
+		if server_api_obj.onlinePlayers < min_onlinePlayers:
+			bool_test_tranquility = False #not enough players logged in
+			self.tranquility_status_message = "%s;FAILED: onlinePlayers check: %s min=%s" % (\
+																				self.tranquility_status_message,\
+																				server_api_obj.onlinePlayers,\
+																				min_onlinePlayers)
+			#TODO: log exception
+		if server_api_obj.serverOpen == False:
+			bool_test_tranquility = False #server not online
+			self.tranquility_status_message = "%s;FAILED: serverOpen status FALSE" % (\
+																				self.tranquility_status_message)
+			#TODO: log exception
+			
+		self.tranquility_tested = True
+		if bool_test_tranquility:
+			self.tranquility_status_message = "%s;PASSED: Tranquility status GOOD" % (\
+																				self.tranquility_status_message)
+			#TODO: log exception
+		self.tranquility_status = bool_test_tranquility	
+		return bool_test_tranquility
+		
 def writelog(pid, message, push_email=False):
 	logtime = datetime.utcnow()
 	logtime_str = logtime.strftime('%Y-%m-%d %H:%M:%S')
@@ -167,7 +230,7 @@ def _initSQL(table_name, pid=script_pid):
 	
 	db_obj = DB_handle(db_con, db_cur, table_name)	#put db parts in a class for better portability
 	return db_obj
-
+	
 def fetch_data(pid, debug=False):
 	#if debug: print "\tfetch_data()"
 	fetch_url = redisq_url
