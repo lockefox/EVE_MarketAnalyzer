@@ -92,10 +92,15 @@ class API_status(object):
 		self.tranquility_tested = False
 		self.tranquility_status = False
 		self.tranquility_status_message = ""
+		
+		self.CREST_tested = False
 		self.CREST_status = False
 		self.CREST_status_message = ""
+		
+		self.zkb_tested = False
 		self.zkb_status = False
 		self.zkb_status_message = ""
+		
 		self.log_pid = log_pid
 	
 	def connectionsGood(self):
