@@ -194,7 +194,7 @@ def write_data ( odbc_dsn, table_name, dataObj, debug ):
 	if write_mod == -1:
 		local_write_mod = data_to_process+10
 		
-	write_str = '''INSERT INTO {table_name} ({table_headers}) VALUES'''
+	write_str = '''INSERT IGNORE INTO {table_name} ({table_headers}) VALUES'''
 	write_str = write_str.format(
 					table_name    = table_name,
 					table_headers = ','.join(table_headers)
@@ -415,7 +415,7 @@ def main():
 		#sys.exit()
 		date_query = ""
 		max_dateTime = date_str_dateTime
-		min_dateTime = date_str_dateTime
+		min_dateTime = date_str_dateTime - timedelta(days=1)	#subtract 1 day for overlap
 		while max_dateTime < nowTime:
 			max_dateTime = max_dateTime + timedelta( days=sub_date_range ) #increment max_date
 			max_date_str = max_dateTime.strftime( "%Y-%m-%d" )
