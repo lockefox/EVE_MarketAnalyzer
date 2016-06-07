@@ -30,14 +30,14 @@ def print_progress(timed_msg, last, start, count, total, debug=False):
 		elapsed = (now - start).total_seconds() / 60
 		remaining = (total - count) * elapsed / count if count else float('NaN')
 		thread_print( timed_msg.format(
-			finished=count, 
-			total=total, 
-			elapsed=elapsed, 
+			finished=count,
+			total=total,
+			elapsed=elapsed,
 			remaining=remaining
 			) )
 		return now
-	else: 
-		return last 
+	else:
+		return last
 
 
 def _validate_connection(
@@ -47,7 +47,7 @@ def _validate_connection(
 		):
 	db_conn, db_cur = connect_local_databases(schema)
 
-	def _initSQL(table_name):	
+	def _initSQL(table_name):
 		db_cur.execute('''SHOW TABLES LIKE \'%s\'''' % table_name)
 		table_exists = len(db_cur.fetchall())
 		if table_exists:	#if len != 0, table is already initialized
@@ -65,7 +65,7 @@ def _validate_connection(
 				sys.exit(2)
 			sys.stdout.write('.%s:\tCREATED\n' % table_name)
 			return
-	
+
 	for table in tables:
 		_initSQL(table)
 	db_conn.close()
@@ -92,7 +92,7 @@ def fetch_markethistory(regions={}, thread_id=(0,1), debug=False, testserver=Fal
 		'''
 
 	item_list = [row[0] for row in sde_cur.execute(items_query).fetchall()]
-	
+
 	price_history_query = '''SHOW COLUMNS FROM `%s`''' % crest_pricehistory
 	price_history_headers = [column[0] for column in data_cur.execute(price_history_query).fetchall()]
 
@@ -114,22 +114,28 @@ def fetch_markethistory(regions={}, thread_id=(0,1), debug=False, testserver=Fal
 		i_skipped = 0
 		for count,itemID in enumerate(item_list):
 			if count % parts <> me: continue
-			if thread_exit_flag: 
+			if thread_exit_flag:
 				thread_print( fmt_name + "Received exit signal." )
 				return
 			last = print_progress_thread()
-			query = 'market/%s/types/%s/history/' % (regionID,itemID)
+			#query = 'market/%s/types/%s/history/' % (regionID,itemID)
+			query = 'market/{regionID}/history/?{crest_path}inventory/types/{typeID}/'
+			query = query.format(
+				regionID   = regionID,
+				crest_path = crest_path,
+				typeID     = itemID
+				)
 			if str(itemID) in crash_JSON['market_history'][regionID]:
 				i_finished = i_finished + 1
 				i_skipped = i_skipped + 1
 				if i_skipped % 10 == 0:
 					thread_print( '{0} skipped {1}'.format(fmt_name, i_skipped) )
 				continue #already processed data
-			
+
 			#price_JSON = fetchURL_CREST(query, testserver, debug=False)
 			price_JSON = fetchURL_request(query, testserver, debug=False)
-			
-			if len(price_JSON['items']) == 0: 
+
+			if len(price_JSON['items']) == 0:
 				if debug: thread_print( '%s:\tEMPTY' % query )
 				continue
 			data_to_write = []
@@ -144,11 +150,11 @@ def fetch_markethistory(regions={}, thread_id=(0,1), debug=False, testserver=Fal
 				line_to_write.append(float(entry['highPrice']))
 				line_to_write.append(float(entry['avgPrice']))
 				data_to_write.append(line_to_write)
-			
+
 			writeSQL(data_cur,crest_pricehistory,price_history_headers,data_to_write)
 			write_progress('market_history',regionID,itemID,crash_JSON)
 			i_finished = i_finished + 1
-	
+
 	data_conn.close() # should use a with maybe.
 
 def writeSQL(db_cur, table, headers_list, data_list, hard_overwrite=True, debug=False):
@@ -168,20 +174,20 @@ def writeSQL(db_cur, table, headers_list, data_list, hard_overwrite=True, debug=
 		value_string = value_string[1:]
 		if debug: thread_print( value_string )
 		insert_statement = '%s (%s),' % (insert_statement, value_string)
-	
+
 	insert_statement = insert_statement[:-1]	#pop off trailing ','
 	if hard_overwrite:
 		duplicate_str = '''ON DUPLICATE KEY UPDATE '''
 		for header in headers_list:
 			duplicate_str = "%s %s=%s," % (duplicate_str, header, header)
-		
+
 		insert_statement = "%s %s" % (insert_statement, duplicate_str)
 		insert_statement = insert_statement[:-1]	#pop off trailing ','
 	if debug: thread_print( insert_statement )
 	db_cur.execute(insert_statement).commit()
-	
-	
-def fetchURL_request(query, testserver=False, debug=False):
+
+
+def fetchURL_request(query, testserver=False, debug=True):
 	fetch_url = ''
 	if testserver: fetch_url = '%s%s' % (crest_test_path, query)
 	else: fetch_url = '%s%s' % (crest_path, query)
@@ -200,14 +206,15 @@ def fetchURL_request(query, testserver=False, debug=False):
 									timeout = (default_timeout,default_readtimeout))
 			return_object = request.json()
 		except requests.exceptions.ConnectionError as e:
-			fatal_error = True
+			#fatal_error = True
+			fatal_error = False
 			thread_print('connectionError:%s %s' % (e,fetch_url))
 			continue
-		except requests.exceptions.ConnectTimeout as e:	
+		except requests.exceptions.ConnectTimeout as e:
 			fatal_error = True
 			thread_print('connectionTimeout:%s %s' % (e,fetch_url))
 			continue
-		except requests.exceptions.ReadTimeout as e:	
+		except requests.exceptions.ReadTimeout as e:
 			fatal_error = True
 			thread_print('readTimeout:%s %s' % (e,fetch_url))
 			continue
@@ -215,7 +222,7 @@ def fetchURL_request(query, testserver=False, debug=False):
 			fatal_error = True
 			thread_print('response not JSON')
 			raise
-		
+
 		if request.status_code == requests.codes.ok:
 			break
 		else:
@@ -224,27 +231,27 @@ def fetchURL_request(query, testserver=False, debug=False):
 				threading._sleep(random.random()/8.0)
 			else:
 				thread_print('HTTPError:%s %s' % (request.status_code,fetch_url))
-			continue 
+			continue
 	else:
 		#thread_print( headers )
 		if fatal_error: sys.exit(2)
 		return {'items':[]}
 
 	return return_object
-			
+
 def fetchURL_CREST(query, testserver=False, debug=False):
 	import random
 	#Returns parsed JSON of CREST query
 	real_query = ''
 	if testserver: real_query = '%s%s' % (crest_test_path, query)
 	else: real_query = '%s%s' % (crest_path, query)
-	
+
 	if debug: thread_print( real_query )
-	
+
 	request = urllib2.Request(real_query)
 	request.add_header('Accept-Encoding','gzip')
 	request.add_header('User-Agent',user_agent)
-	
+
 	headers = {}
 	fatal_error = True
 	for tries in range (0,retry_limit):
@@ -255,7 +262,7 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 			headers = raw_response.headers
 			response = raw_response.read()
 		except urllib2.HTTPError as e:
-			if e.code == 503: 
+			if e.code == 503:
 				threading._sleep(random.random()/8.0)
 			else:
 				thread_print( 'HTTPError:%s %s' % (e,real_query) )
@@ -273,9 +280,9 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 			thread_print( 'Socket Error:%s %s' % (e,real_query) )
 			fatal_error = True
 			continue
-		
+
 		do_gzip = headers.get('Content-Encoding','') == 'gzip'
-				
+
 		if do_gzip:
 			try:
 				buf = StringIO.StringIO(response)
@@ -298,9 +305,9 @@ def fetchURL_CREST(query, testserver=False, debug=False):
 		thread_print( headers )
 		if fatal_error: sys.exit(2)
 		return {'items':[]}
-	
+
 	return return_result
-	
+
 def _date_convert(date_str):
 	new_time = datetime.strptime(date_str,'%Y-%m-%dT%H:%M:%S')
 	return new_time.strftime('%Y-%m-%d')
@@ -313,18 +320,18 @@ def recover_on_restart(region_id, thread_id):
 		with open(crash_filename,'r') as f:
 			crash_JSON = json.load(f)
 		if (
-				(not 'market_history' in crash_JSON) or 
+				(not 'market_history' in crash_JSON) or
 				(not region_id in crash_JSON['market_history'])
 			):
 			raise Exception("Corrupted recovery file.")
-		msg = '%s loaded progress file %s with %s items' 
+		msg = '%s loaded progress file %s with %s items'
 	except Exception as e:
 		msg = '%s found no progress file; starting fresh with %s and %s items'
 		crash_JSON['market_history'] = {}
 		crash_JSON['market_history'][region_id] = {}
 	crash_JSON['filename'] = crash_filename
 	num_items = len(crash_JSON['market_history'][region_id])
-	thread_print( msg % (fmt_name, crash_filename, num_items) ) 
+	thread_print( msg % (fmt_name, crash_filename, num_items) )
 	return crash_JSON
 
 def write_progress(subtable_name, key1, key2, crash_JSON):
@@ -333,7 +340,7 @@ def write_progress(subtable_name, key1, key2, crash_JSON):
 	if key1 not in crash_JSON[subtable_name]:
 		crash_JSON[subtable_name][key1]={}
 	crash_JSON[subtable_name][key1][key2]=1
-	
+
 	with open(crash_JSON['filename'],'w') as crash_file:
 		json.dump(crash_JSON, crash_file)
 
@@ -348,14 +355,14 @@ def launch_region_threads(regions={}, nthreads=1):
 				'testserver': False
 				}
 			new_thread = threading.Thread(
-				name="{1}/{0:s}".format(region_name, n), 
-				kwargs=kwargs, 
+				name="{1}/{0:s}".format(region_name, n),
+				kwargs=kwargs,
 				target=fetch_markethistory
 				)
 			new_thread.daemon = False # So they can clean up properly
 			region_threads.append(new_thread)
 			new_thread.start()
-	return region_threads		
+	return region_threads
 
 def wait_region_threads(threads=[]):
 	start = datetime.now()
@@ -367,10 +374,10 @@ def wait_region_threads(threads=[]):
 			else: done.append(t.name)
 		if done:
 			last = print_progress(
-				", ".join(done) + " finished. {elapsed:.2f} m total", 
-				last, 
-				start, 
-				len(done), 
+				", ".join(done) + " finished. {elapsed:.2f} m total",
+				last,
+				start,
+				len(done),
 				len(threads)
 				)
 
@@ -382,7 +389,7 @@ def _optimize_database():
 	data_conn, data_cur = connect_local_databases(db_schema)
 	data_cur.execute('''OPTIMIZE TABLE `%s`''' % crest_pricehistory).commit()
 	data_conn.close()
-	
+
 def _clean_dir():
 	thread_print( "Cleaning up progress/crash files" )
 	rm_list = glob.glob('*crest_progress*')
@@ -391,11 +398,14 @@ def _clean_dir():
 
 def main():
 	max_threads = thread_count
+
 	threads_per_region = max_threads // len(trunc_region_list)
 	_validate_connection()
 	region_threads = launch_region_threads(trunc_region_list, threads_per_region)
 	wait_region_threads(region_threads)
-	_optimize_database()
+
+	if bool_doOptimize:
+		_optimize_database()
 	_clean_dir()
 
 if __name__ == "__main__":

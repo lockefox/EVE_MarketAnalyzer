@@ -25,6 +25,7 @@ tick_delay_dbg = timedelta(seconds=5)
 default_timeout = int(conf.get('GLOBALS','default_timeout'))
 default_readtimeout = int(conf.get('GLOBALS','default_readtimeout'))
 thread_count = int(conf.get('GLOBALS', 'thread_count'))
+bool_doOptimize = bool(conf.get('CREST', 'optimize_table'))
 ####DB STUFF####
 db_host   = conf.get('GLOBALS','db_host')
 db_user   = conf.get('GLOBALS','db_user')
@@ -40,7 +41,7 @@ def connect_local_databases(*args):
 	schemata = args if args else [db_schema, sde_schema]
 	connections = [
 		pypyodbc.connect(
-			'DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABASE=%s' 
+			'DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABASE=%s'
 			% (db_driver,db_host,db_port,db_user,db_pw,schema)
 			)
 		for schema in schemata
