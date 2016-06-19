@@ -119,11 +119,10 @@ def fetch_markethistory(regions={}, thread_id=(0,1), debug=False, testserver=Fal
 				return
 			last = print_progress_thread()
 			#query = 'market/%s/types/%s/history/' % (regionID,itemID)
-			query = 'market/{regionID}/history/?{crest_path}inventory/types/{typeID}/'
-			query = query.format(
-				regionID   = regionID,
-				crest_path = crest_path,
-				typeID     = itemID
+			query = 'market/{regionID}/history/?type={crest_path}inventory/types/{typeID}/'.format(
+					regionID = regionID,
+					crest_path = crest_path,
+					typeID = typeID
 				)
 			if str(itemID) in crash_JSON['market_history'][regionID]:
 				i_finished = i_finished + 1
