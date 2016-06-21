@@ -3,6 +3,6 @@ FROM invTypes conv
 JOIN invGroups grp ON (conv.groupID = grp.groupID)
 WHERE marketgroupid IS NOT NULL
 AND conv.published = 1
-AND grp.categoryid NOT IN (9,16,350001,2)
+AND (grp.categoryid NOT IN (9,16,350001,2) OR grp.groupID IN (711))
 AND grp.groupid NOT IN (30,659,485,485,873,883,1194)
 -- ORDER BY typeid
