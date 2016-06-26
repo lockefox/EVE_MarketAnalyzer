@@ -196,7 +196,7 @@
 					"ODBC_DSN":"randomboy_new",
 					"create":"snapshot_evecentral.mysql",
 					"query":"locationID IN (30000142,30002510,30002187,30002659)",
-					"date_range":90,
+					"date_range":500,
 					"sub_date_range":5
 				}
 			},

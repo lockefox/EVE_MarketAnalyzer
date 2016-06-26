@@ -119,10 +119,10 @@ def fetch_markethistory(regions={}, thread_id=(0,1), debug=False, testserver=Fal
 				return
 			last = print_progress_thread()
 			#query = 'market/%s/types/%s/history/' % (regionID,itemID)
-			query = 'market/{regionID}/history/?type={crest_path}inventory/types/{typeID}/'.format(
+			query = 'market/{regionID}/history/?type={crest_path}inventory/types/{itemID}/'.format(
 					regionID = regionID,
 					crest_path = crest_path,
-					typeID = typeID
+					itemID = itemID
 				)
 			if str(itemID) in crash_JSON['market_history'][regionID]:
 				i_finished = i_finished + 1
@@ -201,7 +201,7 @@ def fetchURL_request(query, testserver=False, debug=True):
 		time.sleep(sleep_timer*tries)
 		try:
 			request = requests.get( fetch_url,
-									params  = params,
+									headers  = params,
 									timeout = (default_timeout,default_readtimeout))
 			return_object = request.json()
 		except requests.exceptions.ConnectionError as e:
