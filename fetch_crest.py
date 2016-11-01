@@ -153,13 +153,13 @@ def fetch_markethistory(regions={}, thread_id=(0,1), debug=False, testserver=Fal
 				line_to_write.append(float(entry['avgPrice']))
 				data_to_write.append(line_to_write)
 
-			writeSQL(data_cur,crest_pricehistory,price_history_headers,data_to_write)
+			writeSQL(data_cur,data_conn,crest_pricehistory,price_history_headers,data_to_write)
 			write_progress('market_history',regionID,itemID,crash_JSON)
 			i_finished = i_finished + 1
 
 	data_conn.close() # should use a with maybe.
 
-def writeSQL(db_cur, table, headers_list, data_list, hard_overwrite=True, debug=False):
+def writeSQL(db_cur, db_conn, table, headers_list, data_list, hard_overwrite=True, debug=False):
 	insert_statement = '''INSERT INTO %s (%s) VALUES''' % (table, ','.join(headers_list))
 	if debug: thread_print( insert_statement )
 
