@@ -91,10 +91,12 @@ def fetch_markethistory(regions={}, thread_id=(0,1), debug=False, testserver=Fal
 		ORDER BY typeid
 		'''
 
-	item_list = [row[0] for row in sde_cur.execute(items_query).fetchall()]
+	sde_cur.execute(items_query)
+	item_list = [row[0] for row in sde_cur.fetchall()]
 
 	price_history_query = '''SHOW COLUMNS FROM `%s`''' % crest_pricehistory
-	price_history_headers = [column[0] for column in data_cur.execute(price_history_query).fetchall()]
+	data_cur.execute(price_history_query)
+	price_history_headers = [column[0] for column in data_cur.fetchall()]
 
 	nitems = len(item_list)
 	tail = nitems % parts
