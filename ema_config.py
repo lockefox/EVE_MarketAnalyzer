@@ -1,9 +1,12 @@
 import ConfigParser
-import pypyodbc
 import sys
 from os import environ, path, getcwd
 from datetime import timedelta
 import itertools
+
+import MySQLdb
+import pypyodbc
+
 flatten = itertools.chain.from_iterable
 
 localpath = path.dirname(path.realpath(__file__))
@@ -40,10 +43,17 @@ def connect_local_databases(*args):
 	global db_driver, db_host, db_port, db_user, db_pw, db_schema, sde_schema
 	schemata = args if args else [db_schema, sde_schema]
 	connections = [
-		pypyodbc.connect(
-			'DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABASE=%s'
-			% (db_driver,db_host,db_port,db_user,db_pw,schema)
-			)
+		MySQLdb.connect(
+			host=db_host,
+			user=db_user,
+			passwd=db_pw,
+			port=db_port,
+			db=schema
+		)
+		#pypyodbc.connect(
+		#	'DRIVER={%s};SERVER=%s;PORT=%s;UID=%s;PWD=%s;DATABASE=%s'
+		#	% (db_driver,db_host,db_port,db_user,db_pw,schema)
+		#	)
 		for schema in schemata
 		]
 	return flatten([conn, conn.cursor()] for conn in connections)
