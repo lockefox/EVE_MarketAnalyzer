@@ -59,7 +59,8 @@ def _validate_connection(
 			try:
 				for command in table_init_commands:
 					if debug: print command
-					db_cur.execute(command).commit()
+					db_cur.execute(command)
+					db_cur.commit()
 			except Exception as e:
 				sys.stdout.write('.%s:\tERROR\t%s\n' % (table_name,e[1]))
 				sys.exit(2)
@@ -185,7 +186,8 @@ def writeSQL(db_cur, table, headers_list, data_list, hard_overwrite=True, debug=
 		insert_statement = "%s %s" % (insert_statement, duplicate_str)
 		insert_statement = insert_statement[:-1]	#pop off trailing ','
 	if debug: thread_print( insert_statement )
-	db_cur.execute(insert_statement).commit()
+	db_cur.execute(insert_statement)
+	db_cur.commit()
 
 
 def fetchURL_request(query, testserver=False, debug=True):
@@ -388,7 +390,8 @@ def wait_region_threads(threads=[]):
 def _optimize_database():
 	thread_print( "Optimizing database %s..." % crest_pricehistory )
 	data_conn, data_cur = connect_local_databases(db_schema)
-	data_cur.execute('''OPTIMIZE TABLE `%s`''' % crest_pricehistory).commit()
+	data_cur.execute('''OPTIMIZE TABLE `%s`''' % crest_pricehistory)
+	data_cur.commit()
 	data_conn.close()
 
 def _clean_dir():
